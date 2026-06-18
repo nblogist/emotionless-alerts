@@ -4,6 +4,7 @@ import { DEFAULT_CONFIG } from '@/lib/defaults';
 import { getLivePrices, fetchWeeklyCloses } from '@/lib/prices';
 import * as rules from '@/lib/rules';
 import { sendTelegram } from '@/lib/telegram';
+import { sendEmail } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,6 +94,7 @@ export async function GET(request) {
       if (config.telegramChatId) {
         await sendTelegram(config.telegramChatId, message);
       }
+      await sendEmail(`Emotionless Alert: ${alerts.length} rule(s) fired`, message);
       for (const a of alerts) {
         await store.lpush('alertHistory', { message: a, time: now.toISOString() });
       }

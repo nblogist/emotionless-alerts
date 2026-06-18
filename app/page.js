@@ -7,7 +7,6 @@ export default function Dashboard() {
   const [config, setConfig] = useState(null);
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState(null);
   const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {
@@ -20,7 +19,6 @@ export default function Dashboard() {
       setPrices(await pRes.json());
       setConfig(await cRes.json());
       setStatus(await sRes.json());
-      setLastUpdate(new Date());
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -38,250 +36,212 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
-          <span className="text-zinc-500 text-sm">Loading market data...</span>
-        </div>
+        <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
       </div>
     );
   }
 
   const coins = config?.coins || {};
-  const deployed = Object.values(coins).reduce((s, c) => s + (c.holdingsUsd || 0), 0);
+  const hasActiveAlerts = status?.alerts?.length > 0;
 
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="border-b border-zinc-800/60 backdrop-blur-sm sticky top-0 z-10 bg-zinc-950/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold tracking-tight flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              EMOTIONLESS ALERTS
-            </h1>
-            <p className="text-[11px] text-zinc-600 mt-0.5 font-mono">
-              {lastUpdate ? `Updated ${lastUpdate.toLocaleTimeString()}` : 'Loading...'}
-              {status?.weeklyCloseCount > 0 && ` · ${status.weeklyCloseCount} weekly closes tracked`}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={fetchData}
-              className="px-3 py-1.5 text-xs bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/50 rounded-lg transition-all hover:border-zinc-600"
-            >
+      <header className="border-b border-zinc-800/60 sticky top-0 z-10 bg-zinc-950/90 backdrop-blur-sm">
+        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+          <h1 className="text-lg font-bold tracking-tight">Emotionless Alerts</h1>
+          <div className="flex items-center gap-2">
+            <button onClick={fetchData} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
               Refresh
             </button>
-            <Link
-              href="/settings"
-              className="px-4 py-1.5 text-xs bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/50 rounded-lg transition-all hover:border-zinc-600"
-            >
+            <Link href="/settings" className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
               Settings
             </Link>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-5">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-300">
-            {error}
-          </div>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-300">{error}</div>
         )}
 
-        {/* Portfolio Overview */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="Total Capital" value={fmt(config?.totalCapital)} />
-          <StatCard label="Deployed" value={fmt(deployed)} />
-          <StatCard label="Powder" value={fmt(config?.powderRemaining)} color="blue" />
-          <StatCard label="Reserve" value={fmt(config?.reserveRemaining)} color="amber" />
+        {/* Status Banner */}
+        <div className={`rounded-xl p-4 text-center ${
+          hasActiveAlerts
+            ? 'bg-amber-500/10 border border-amber-500/30'
+            : 'bg-emerald-500/5 border border-emerald-500/20'
+        }`}>
+          <p className={`text-sm font-medium ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
+            {hasActiveAlerts
+              ? `${status.alerts.length} alert(s) fired recently. Check below.`
+              : 'All quiet. No action needed right now.'}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">
+            Bot checks prices daily at 2:00 PM UTC and sends you a Telegram message only when something needs attention.
+          </p>
+        </div>
+
+        {/* Your Money */}
+        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Your Money</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-zinc-500">Total Budget</p>
+              <p className="text-lg font-mono font-bold">{fmt(config?.totalCapital)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Invested So Far</p>
+              <p className="text-lg font-mono font-bold">
+                {fmt(Object.values(coins).reduce((s, c) => s + (c.holdingsUsd || 0), 0))}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Cash Ready to Deploy</p>
+              <p className="text-lg font-mono font-bold text-blue-400">{fmt(config?.powderRemaining)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-zinc-500">Emergency Reserve</p>
+              <p className="text-lg font-mono font-bold text-amber-400">{fmt(config?.reserveRemaining)}</p>
+            </div>
+          </div>
         </div>
 
         {/* Coin Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {Object.entries(coins).map(([coin, cc]) => {
             const price = prices?.[coin];
             if (!price) return null;
-            const buyAt = cc.buyReference * (1 - (config?.buyBandPct || 0.07));
             const pnl = ((price - cc.avgCost) / cc.avgCost) * 100;
-            const gapToBuy = ((price - buyAt) / buyAt) * 100;
-            const firstSell = cc.avgCost * (1 + (config?.firstSellPct || 0.4));
-            const gapToSell = ((price - firstSell) / firstSell) * 100;
+            const buyAt = cc.buyReference * (1 - (config?.buyBandPct || 0.07));
+            const sellAt = cc.avgCost * (1 + (config?.firstSellPct || 0.4));
+            const nearBuy = price <= buyAt;
+            const nearSell = price >= sellAt;
 
             return (
-              <div
-                key={coin}
-                className="bg-zinc-900/50 border border-zinc-800/60 rounded-2xl p-5 hover:border-zinc-700/60 transition-colors"
-              >
-                <div className="flex justify-between items-start mb-5">
+              <div key={coin} className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+                {/* Coin name + price */}
+                <div className="flex justify-between items-start mb-4">
                   <div>
-                    <span className="text-xs font-medium text-zinc-500 uppercase tracking-wider">
-                      {coin}
-                    </span>
-                    <p className="text-2xl sm:text-3xl font-mono font-bold tabular-nums mt-1">
-                      ${price < 10 ? price.toFixed(2) : price.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    <p className="text-xs text-zinc-500 font-medium">{coin}</p>
+                    <p className="text-2xl font-mono font-bold mt-0.5">
+                      {fmtPrice(price)}
                     </p>
                   </div>
-                  <span
-                    className={`text-xs font-mono font-semibold px-2 py-1 rounded-md ${
-                      pnl >= 0
-                        ? 'bg-emerald-500/10 text-emerald-400'
-                        : 'bg-red-500/10 text-red-400'
-                    }`}
-                  >
-                    {pnl >= 0 ? '+' : ''}
-                    {pnl.toFixed(1)}%
+                  <span className={`text-xs font-mono font-semibold px-2 py-1 rounded-md ${
+                    pnl >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                  }`}>
+                    {pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%
                   </span>
                 </div>
 
-                <div className="space-y-2.5 text-[13px]">
-                  <Row label="Avg Cost" value={fmtPrice(cc.avgCost)} />
-                  <Row label="Holdings" value={fmt(cc.holdingsUsd)} />
+                {/* Simple stats */}
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">You bought at (avg)</span>
+                    <span className="font-mono">{fmtPrice(cc.avgCost)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-zinc-500">You hold</span>
+                    <span className="font-mono">{fmt(cc.holdingsUsd)}</span>
+                  </div>
 
-                  <div className="border-t border-zinc-800/50 my-3" />
+                  <div className="border-t border-zinc-800/50 pt-3 space-y-2">
+                    {/* Buy signal */}
+                    <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
+                      nearBuy ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-zinc-800/30'
+                    }`}>
+                      <span className={`text-xs ${nearBuy ? 'text-blue-300 font-medium' : 'text-zinc-500'}`}>
+                        {nearBuy ? 'BUY ZONE' : 'Next buy if price drops to'}
+                      </span>
+                      <span className={`font-mono text-xs ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-400'}`}>
+                        {fmtPrice(buyAt)}
+                      </span>
+                    </div>
 
-                  <Row label="Buy Ref" value={fmtPrice(cc.buyReference)} />
-                  <Row
-                    label="Buy Band"
-                    value={fmtPrice(buyAt)}
-                    valueClass="text-blue-400"
-                  />
-                  <Row
-                    label="Gap to Buy"
-                    value={`${gapToBuy <= 0 ? '' : '+'}${gapToBuy.toFixed(1)}%`}
-                    valueClass={gapToBuy <= 0 ? 'text-emerald-400 font-semibold' : 'text-zinc-400'}
-                  />
-
-                  <div className="border-t border-zinc-800/50 my-3" />
-
-                  <Row
-                    label="1st Sell At"
-                    value={fmtPrice(firstSell)}
-                    valueClass="text-orange-400"
-                  />
-                  <Row
-                    label="Gap to Sell"
-                    value={`${gapToSell >= 0 ? '+' : ''}${gapToSell.toFixed(1)}%`}
-                    valueClass={gapToSell >= 0 ? 'text-orange-400 font-semibold' : 'text-zinc-400'}
-                  />
+                    {/* Sell signal */}
+                    <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
+                      nearSell ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-zinc-800/30'
+                    }`}>
+                      <span className={`text-xs ${nearSell ? 'text-orange-300 font-medium' : 'text-zinc-500'}`}>
+                        {nearSell ? 'SELL ZONE — take 15% off' : 'First sell if price rises to'}
+                      </span>
+                      <span className={`font-mono text-xs ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-400'}`}>
+                        {fmtPrice(sellAt)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Rule Status */}
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-2xl p-5">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">
-            Rule Status
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-zinc-500">
-                  <th className="text-left pb-3 pr-6 font-medium">Rule</th>
-                  {Object.keys(coins).map((c) => (
-                    <th key={c} className="pb-3 px-4 text-center font-medium">
-                      {c}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-800/50">
-                <RuleRow
-                  name="Buy Band"
-                  coins={coins}
-                  status={status}
-                  ruleKey="buyBand"
-                />
-                <RuleRow
-                  name="Sell Trigger"
-                  coins={coins}
-                  status={status}
-                  ruleKey="sellTrigger"
-                />
-                <RuleRow
-                  name="Drawdown"
-                  coins={coins}
-                  status={status}
-                  ruleKey="drawdown"
-                  renderValue={(val) =>
-                    val ? `-${val}%` : null
-                  }
-                />
-                <RuleRow
-                  name="Floor Confirmed"
-                  coins={coins}
-                  status={status}
-                  ruleKey="floorConfirmed"
-                />
-                <tr>
-                  <td className="py-3 pr-6 text-zinc-300">Thesis Break</td>
-                  <td
-                    className="py-3 px-4 text-center"
-                    colSpan={Object.keys(coins).length}
-                  >
-                    <Dot active={status?.rules?.thesisBreak} />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-3 pr-6 text-zinc-300">Upside Break</td>
-                  <td
-                    className="py-3 px-4 text-center"
-                    colSpan={Object.keys(coins).length}
-                  >
-                    <Dot active={status?.rules?.upsideBreak} />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+        {/* Safety Checks */}
+        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Safety Checks</h2>
+          <p className="text-xs text-zinc-600 mb-4">These run automatically. You get a Telegram alert if any trigger.</p>
+          <div className="space-y-2">
+            <CheckRow
+              label="Drawdown Warning"
+              desc="Price drops -20%, -35%, or -50% from all-time high"
+              active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
+            />
+            <CheckRow
+              label="Floor Confirmed"
+              desc="After a deep crash, price holds above the bottom for 2 weeks"
+              active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
+            />
+            <CheckRow
+              label="Thesis Break"
+              desc="BTC closes below its 200-week moving average for 2 weeks (stop buying)"
+              active={status?.rules?.thesisBreak}
+            />
+            <CheckRow
+              label="Upside Breakout"
+              desc={`BTC weekly close above $${(config?.upsideBreakUsd || 90000).toLocaleString()} (deploy 40% of cash)`}
+              active={status?.rules?.upsideBreak}
+            />
+            <CheckRow
+              label="Monthly Review"
+              desc="Reminder on the 1st of each month to review your positions"
+              active={false}
+              isInfo
+            />
           </div>
         </div>
 
         {/* 200-Week MA */}
         {status?.ma200 && (
-          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
-              <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
-                BTC 200-Week Moving Average
-              </h2>
-              <p className="text-2xl font-mono font-bold mt-1">
-                ${Math.round(status.ma200).toLocaleString()}
-              </p>
+              <p className="text-xs text-zinc-500">BTC 200-Week Moving Average</p>
+              <p className="text-xl font-mono font-bold mt-0.5">${Math.round(status.ma200).toLocaleString()}</p>
             </div>
-            <div
-              className={`text-sm font-medium px-3 py-1.5 rounded-lg ${
-                (prices?.BTC || 0) > status.ma200
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : 'bg-red-500/10 text-red-400'
-              }`}
-            >
-              BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} 200wMA
-            </div>
+            <span className={`text-xs font-medium px-3 py-1.5 rounded-lg ${
+              (prices?.BTC || 0) > status.ma200
+                ? 'bg-emerald-500/10 text-emerald-400'
+                : 'bg-red-500/10 text-red-400'
+            }`}>
+              BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} — {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
+            </span>
           </div>
         )}
 
         {/* Recent Alerts */}
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-2xl p-5">
-          <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-4">
-            Recent Alerts
-          </h2>
+        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Recent Alerts</h2>
+          <p className="text-xs text-zinc-600 mb-3">Alerts sent to your Telegram. Same alert won&apos;t repeat until conditions change.</p>
           {!status?.alerts || status.alerts.length === 0 ? (
-            <p className="text-zinc-600 text-sm italic">
-              No alerts yet. Silence = do nothing. That&apos;s correct.
+            <p className="text-zinc-600 text-sm py-4 text-center">
+              No alerts yet. Silence means do nothing — that&apos;s the right move most days.
             </p>
           ) : (
             <div className="space-y-2">
               {status.alerts.map((a, i) => (
-                <div
-                  key={i}
-                  className="bg-zinc-800/30 border border-zinc-800/50 rounded-xl p-3"
-                >
-                  <span className="text-[11px] font-mono text-zinc-600">
-                    {new Date(a.time).toLocaleString()}
-                  </span>
-                  <p className="text-sm text-zinc-200 mt-1 font-mono leading-relaxed">
-                    {a.message}
-                  </p>
+                <div key={i} className="bg-zinc-800/30 rounded-lg p-3">
+                  <p className="text-xs text-zinc-500">{new Date(a.time).toLocaleString()}</p>
+                  <p className="text-sm text-zinc-200 mt-1">{a.message}</p>
                 </div>
               ))}
             </div>
@@ -290,18 +250,14 @@ export default function Dashboard() {
 
         {/* KV Warning */}
         {status && !status.kvConfigured && (
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300/80">
-            <strong className="text-amber-300">KV store not configured.</strong>{' '}
-            Set <code className="text-xs bg-zinc-800 px-1.5 py-0.5 rounded">UPSTASH_REDIS_REST_URL</code> and{' '}
-            <code className="text-xs bg-zinc-800 px-1.5 py-0.5 rounded">UPSTASH_REDIS_REST_TOKEN</code>{' '}
-            in Vercel environment variables for persistent state.
-            Config changes and rule tracking won&apos;t persist without it.
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-sm text-amber-300/80">
+            <strong>Database not connected.</strong> Your settings and alert history won&apos;t be saved between runs.
+            Add your Upstash Redis credentials in Vercel to fix this.
           </div>
         )}
 
-        {/* Footer */}
-        <footer className="text-center text-[11px] text-zinc-700 pt-4 pb-8">
-          Emotionless Alerts v1.0 · Alert-only, never auto-trade · Cron runs daily at 14:00 UTC
+        <footer className="text-center text-[11px] text-zinc-700 pt-2 pb-8">
+          Alert-only. Never auto-trades. Checks prices daily at 2:00 PM UTC.
         </footer>
       </main>
     </div>
@@ -313,74 +269,27 @@ export default function Dashboard() {
 function fmt(n) {
   return n != null ? `$${Number(n).toLocaleString()}` : '—';
 }
+
 function fmtPrice(n) {
   if (n == null) return '—';
-  return n < 10
-    ? `$${n.toFixed(2)}`
-    : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  return n < 10 ? `$${n.toFixed(2)}` : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
 }
 
-function StatCard({ label, value, color }) {
-  const colorClass =
-    color === 'blue'
-      ? 'text-blue-400'
-      : color === 'amber'
-        ? 'text-amber-400'
-        : 'text-zinc-100';
+function CheckRow({ label, desc, active, isInfo }) {
   return (
-    <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-4">
-      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">
-        {label}
-      </p>
-      <p className={`text-lg sm:text-xl font-mono font-bold mt-1 tabular-nums ${colorClass}`}>
-        {value}
-      </p>
+    <div className={`flex items-start gap-3 rounded-lg px-4 py-3 ${
+      active ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-zinc-800/20'
+    }`}>
+      <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+        active ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : isInfo ? 'bg-zinc-600' : 'bg-emerald-600'
+      }`} />
+      <div>
+        <p className={`text-sm font-medium ${active ? 'text-amber-300' : 'text-zinc-300'}`}>{label}</p>
+        <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
+      </div>
+      <span className={`ml-auto text-xs shrink-0 ${active ? 'text-amber-400' : 'text-zinc-600'}`}>
+        {active ? 'TRIGGERED' : 'quiet'}
+      </span>
     </div>
-  );
-}
-
-function Row({ label, value, valueClass = 'text-zinc-200' }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="text-zinc-500">{label}</span>
-      <span className={`font-mono tabular-nums ${valueClass}`}>{value}</span>
-    </div>
-  );
-}
-
-function RuleRow({ name, coins, status, ruleKey, renderValue }) {
-  return (
-    <tr>
-      <td className="py-3 pr-6 text-zinc-300">{name}</td>
-      {Object.keys(coins || {}).map((coin) => {
-        const val = status?.rules?.[`${ruleKey}:${coin}`];
-        const active = renderValue ? !!val : !!val;
-        return (
-          <td key={coin} className="py-3 px-4 text-center">
-            <Dot
-              active={active}
-              label={renderValue && val ? renderValue(val) : undefined}
-            />
-          </td>
-        );
-      })}
-    </tr>
-  );
-}
-
-function Dot({ active, label }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 text-xs font-mono ${
-        active ? 'text-amber-400' : 'text-zinc-600'
-      }`}
-    >
-      <span
-        className={`w-1.5 h-1.5 rounded-full ${
-          active ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : 'bg-zinc-700'
-        }`}
-      />
-      {label || (active ? 'ACTIVE' : 'quiet')}
-    </span>
   );
 }
