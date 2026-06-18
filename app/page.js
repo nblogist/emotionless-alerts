@@ -6,19 +6,22 @@ export default function Dashboard() {
   const [prices, setPrices] = useState(null);
   const [config, setConfig] = useState(null);
   const [status, setStatus] = useState(null);
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [pRes, cRes, sRes] = await Promise.all([
+      const [pRes, cRes, sRes, nRes] = await Promise.all([
         fetch('/api/prices'),
         fetch('/api/config'),
         fetch('/api/status'),
+        fetch('/api/news'),
       ]);
       setPrices(await pRes.json());
       setConfig(await cRes.json());
       setStatus(await sRes.json());
+      setNews(await nRes.json());
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -225,6 +228,28 @@ export default function Dashboard() {
             }`}>
               BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} — {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
             </span>
+          </div>
+        )}
+
+        {/* Market News */}
+        {news.length > 0 && (
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Market News</h2>
+            <p className="text-xs text-zinc-600 mb-3">High-impact news from the last 24 hours that could affect your positions.</p>
+            <div className="space-y-2">
+              {news.map((a, i) => (
+                <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                   className="block bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg p-3 transition-colors">
+                  <div className="flex justify-between items-start gap-2">
+                    <p className="text-sm text-zinc-200">{a.title}</p>
+                    <span className="text-[10px] text-zinc-600 shrink-0">{a.source}</span>
+                  </div>
+                  <p className="text-[10px] text-zinc-600 mt-1">
+                    {new Date(a.published).toLocaleString()}
+                  </p>
+                </a>
+              ))}
+            </div>
           </div>
         )}
 
