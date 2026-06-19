@@ -142,52 +142,83 @@ export default function Dashboard() {
         </div>
 
         {/* Your Money */}
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Your Money</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div>
-              <Tip text="The total amount of money you've set aside for crypto investing in this portfolio.">
-                <p className="text-xs text-zinc-500">Total Budget</p>
-              </Tip>
-              <p className="text-lg font-mono font-bold">{fmt(config?.totalCapital)}</p>
+        {(() => {
+          const totalCost = Object.values(coins).reduce((s, c) => s + (c.holdingsUsd || 0), 0);
+          const totalCurrentValue = Object.entries(coins).reduce((s, [coin, cc]) => {
+            const p = prices?.[coin];
+            if (!p || !cc.avgCost || cc.avgCost === 0) return s;
+            return s + (cc.holdingsUsd / cc.avgCost) * p;
+          }, 0);
+          const totalPnl = totalCurrentValue - totalCost;
+          const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+          return (
+            <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+              <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Your Money</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+                <div>
+                  <Tip text="What all your crypto is worth right now at current market prices.">
+                    <p className="text-xs text-zinc-500">Portfolio Value</p>
+                  </Tip>
+                  <p className="text-xl font-mono font-bold">{fmt(totalCurrentValue)}</p>
+                </div>
+                <div>
+                  <Tip text="How much USD you spent buying all your crypto (your total cost basis).">
+                    <p className="text-xs text-zinc-500">Total Cost</p>
+                  </Tip>
+                  <p className="text-lg font-mono font-bold text-zinc-400">{fmt(totalCost)}</p>
+                </div>
+                <div>
+                  <Tip text={`Your overall profit or loss: current value (${fmt(totalCurrentValue)}) minus total cost (${fmt(totalCost)}).`}>
+                    <p className="text-xs text-zinc-500">Total P&L</p>
+                  </Tip>
+                  <p className={`text-lg font-mono font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)} <span className="text-xs">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 border-t border-zinc-800/50 pt-3">
+                <div>
+                  <Tip text="The total amount of money you've set aside for this portfolio.">
+                    <p className="text-xs text-zinc-500">Total Budget</p>
+                  </Tip>
+                  <p className="text-sm font-mono font-bold">{fmt(config?.totalCapital)}</p>
+                </div>
+                <div>
+                  <Tip text="Cash available for buying dips. Auto-calculated from your transactions.">
+                    <p className="text-xs text-zinc-500">Cash Ready</p>
+                  </Tip>
+                  <p className="text-sm font-mono font-bold text-blue-400">{fmt(config?.powderRemaining)}</p>
+                </div>
+                <div>
+                  <Tip text="Emergency reserve — only deployed after a deep crash + floor confirmation.">
+                    <p className="text-xs text-zinc-500">Reserve</p>
+                  </Tip>
+                  <p className="text-sm font-mono font-bold text-amber-400">{fmt(config?.reserveRemaining)}</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <Tip text="The total USD value of all your current crypto positions combined in this portfolio.">
-                <p className="text-xs text-zinc-500">Invested So Far</p>
-              </Tip>
-              <p className="text-lg font-mono font-bold">
-                {fmt(Object.values(coins).reduce((s, c) => s + (c.holdingsUsd || 0), 0))}
-              </p>
-            </div>
-            <div>
-              <Tip text="Cash you still have available to buy dips. This goes down each time you buy. Set in Settings or auto-calculated from your transactions.">
-                <p className="text-xs text-zinc-500">Cash Ready to Deploy</p>
-              </Tip>
-              <p className="text-lg font-mono font-bold text-blue-400">{fmt(config?.powderRemaining)}</p>
-            </div>
-            <div>
-              <Tip text="Emergency cash only used when the market crashes hard (-35% to -50%) AND a floor is confirmed. This is your safety net for buying the absolute bottom.">
-                <p className="text-xs text-zinc-500">Emergency Reserve</p>
-              </Tip>
-              <p className="text-lg font-mono font-bold text-amber-400">{fmt(config?.reserveRemaining)}</p>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Coin Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {Object.entries(coins).map(([coin, cc]) => {
             const price = prices?.[coin];
             if (!price) return null;
-            const pnl = cc.avgCost ? ((price - cc.avgCost) / cc.avgCost) * 100 : 0;
+            const pnlPct = cc.avgCost ? ((price - cc.avgCost) / cc.avgCost) * 100 : 0;
+            const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
+            const currentValue = totalCoins * price;
+            const pnlUsd = currentValue - cc.holdingsUsd;
             const buyAt = cc.buyReference * (1 - (config?.buyBandPct || 0.07));
+            const buyDropPct = cc.buyReference > 0 ? ((cc.buyReference - buyAt) / cc.buyReference * 100).toFixed(0) : 7;
             const sellAt = cc.avgCost * (1 + (config?.firstSellPct || 0.4));
             const nearBuy = cc.buyReference > 0 && price <= buyAt;
             const nearSell = cc.avgCost > 0 && price >= sellAt;
 
             return (
               <div key={coin} className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-                <div className="flex justify-between items-start mb-4">
+                {/* Header: coin name + price + P&L badge */}
+                <div className="flex justify-between items-start mb-3">
                   <div>
                     <p className="text-xs text-zinc-500 font-medium">{coin}</p>
                     <p className="text-2xl font-mono font-bold mt-0.5">
@@ -195,41 +226,65 @@ export default function Dashboard() {
                     </p>
                   </div>
                   {cc.avgCost > 0 && (
-                    <Tip text={`Your profit/loss. You bought ${coin} at an average of ${fmtPrice(cc.avgCost)} and it's now ${fmtPrice(price)}. ${pnl >= 0 ? 'You are in profit.' : 'You are at a loss — this is normal during dips.'}`}>
+                    <Tip text={`Your profit/loss on ${coin}. You bought at avg ${fmtPrice(cc.avgCost)}, now ${fmtPrice(price)}. ${pnlPct >= 0 ? 'You are in profit.' : 'You are at a loss — normal during dips.'}`}>
                       <span className={`text-xs font-mono font-semibold px-2 py-1 rounded-md ${
-                        pnl >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                        pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                       }`}>
-                        {pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%
+                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
                       </span>
                     </Tip>
                   )}
                 </div>
 
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <Tip text={`The weighted average price of all your ${coin} buys. Example: if you bought 0.01 BTC at $90k and 0.01 at $80k, your avg cost is $85k.`}>
-                      <span className="text-zinc-500">You bought at (avg)</span>
-                    </Tip>
-                    <span className="font-mono">{cc.avgCost > 0 ? fmtPrice(cc.avgCost) : '—'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <Tip text={`Total USD value of your ${coin} position based on your average cost. Add transactions to update this automatically.`}>
-                      <span className="text-zinc-500">You hold</span>
-                    </Tip>
-                    <span className="font-mono">{cc.holdingsUsd > 0 ? fmt(cc.holdingsUsd) : '—'}</span>
-                  </div>
+                {/* Portfolio details — CoinGecko style */}
+                <div className="space-y-2 text-sm">
+                  {cc.avgCost > 0 && (
+                    <>
+                      <div className="flex justify-between">
+                        <Tip text={`You own ${fmtCoinAmt(totalCoins)} ${coin}, bought at a weighted average of ${fmtPrice(cc.avgCost)} per coin.`}>
+                          <span className="text-zinc-500">Holdings</span>
+                        </Tip>
+                        <span className="font-mono">{fmtCoinAmt(totalCoins)} {coin}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <Tip text={`What your ${coin} position is worth right now at market price (${fmtPrice(price)} x ${fmtCoinAmt(totalCoins)}).`}>
+                          <span className="text-zinc-500">Current value</span>
+                        </Tip>
+                        <span className="font-mono">{fmt(currentValue)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <Tip text={`Your total cost basis — how much USD you spent buying this ${coin}.`}>
+                          <span className="text-zinc-500">Total cost</span>
+                        </Tip>
+                        <span className="font-mono">{fmt(cc.holdingsUsd)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <Tip text={`The weighted average price of all your ${coin} buys.`}>
+                          <span className="text-zinc-500">Avg cost</span>
+                        </Tip>
+                        <span className="font-mono">{fmtPrice(cc.avgCost)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-500">Profit / Loss</span>
+                        <span className={`font-mono font-semibold ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {pnlUsd >= 0 ? '+' : ''}{fmt(pnlUsd)}
+                        </span>
+                      </div>
+                    </>
+                  )}
 
+                  {/* Buy/Sell zones */}
                   {cc.buyReference > 0 && (
                     <div className="border-t border-zinc-800/50 pt-3 space-y-2">
                       <Tip text={nearBuy
-                        ? `${coin} is in the BUY ZONE! The price dropped 7%+ below your last buy reference of ${fmtPrice(cc.buyReference)}. The strategy says: deploy your next rung of cash now.`
-                        : `${coin} needs to drop to ${fmtPrice(buyAt)} before you should buy more. This is 7% below your last buy reference of ${fmtPrice(cc.buyReference)}.`
+                        ? `${coin} is in the BUY ZONE! Price is ${((cc.buyReference - price) / cc.buyReference * 100).toFixed(1)}% below your last buy at ${fmtPrice(cc.buyReference)}. Deploy your next rung of cash now.`
+                        : `${coin} needs to drop to ${fmtPrice(buyAt)} (${buyDropPct}% below your last buy at ${fmtPrice(cc.buyReference)}) before you should buy more.`
                       }>
                         <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
                           nearBuy ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-zinc-800/30'
                         }`}>
                           <span className={`text-xs ${nearBuy ? 'text-blue-300 font-medium' : 'text-zinc-500'}`}>
-                            {nearBuy ? 'BUY ZONE' : 'Next buy if price drops to'}
+                            {nearBuy ? 'BUY ZONE' : 'Next buy at'}
                           </span>
                           <span className={`font-mono text-xs ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-400'}`}>
                             {fmtPrice(buyAt)}
@@ -239,14 +294,14 @@ export default function Dashboard() {
 
                       {cc.avgCost > 0 && (
                         <Tip text={nearSell
-                          ? `${coin} is in the SELL ZONE! Price is +40%+ above your avg cost of ${fmtPrice(cc.avgCost)}. The strategy says: sell 15% of your position to lock in profit.`
-                          : `${coin} needs to rise to ${fmtPrice(sellAt)} before you should take profit. This is +40% above your avg cost of ${fmtPrice(cc.avgCost)}.`
+                          ? `${coin} is in the SELL ZONE! Price is +${((price - cc.avgCost) / cc.avgCost * 100).toFixed(0)}% above your avg cost. Sell 15% to lock in profit.`
+                          : `${coin} needs to rise to ${fmtPrice(sellAt)} (+${(config?.firstSellPct * 100).toFixed(0)}% above avg cost ${fmtPrice(cc.avgCost)}) before you take profit.`
                         }>
                           <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-zinc-800/30'
                           }`}>
                             <span className={`text-xs ${nearSell ? 'text-orange-300 font-medium' : 'text-zinc-500'}`}>
-                              {nearSell ? 'SELL ZONE — take 15% off' : 'First sell if price rises to'}
+                              {nearSell ? 'SELL ZONE — take 15% off' : 'First sell at'}
                             </span>
                             <span className={`font-mono text-xs ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-400'}`}>
                               {fmtPrice(sellAt)}
@@ -428,7 +483,16 @@ function fmt(n) {
 
 function fmtPrice(n) {
   if (n == null) return '—';
+  if (n < 0.01) return `$${Number(n).toFixed(6)}`;
   return n < 10 ? `$${n.toFixed(2)}` : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+}
+
+function fmtCoinAmt(n) {
+  if (n == null || n === 0) return '0';
+  if (n >= 1000) return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(4);
+  if (n >= 0.001) return n.toFixed(6);
+  return n.toFixed(8);
 }
 
 function Tip({ text, children }) {
