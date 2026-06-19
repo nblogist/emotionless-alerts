@@ -89,20 +89,13 @@ export async function GET(request) {
     alert = await rules.checkMonthly(config, prices);
     if (alert) alerts.push(alert);
 
-    // News scanning — once per day max
-    const today = now.toISOString().slice(0, 10);
-    const lastNews = await store.get('lastNewsDigest');
-    if (lastNews !== today) {
-      try {
-        const articles = await fetchMarketNews();
-        const newsAlert = formatNewsAlert(articles);
-        if (newsAlert) {
-          alerts.push(newsAlert);
-          await store.set('lastNewsDigest', today);
-        }
-      } catch (e) {
-        console.error('News scan error:', e.message);
-      }
+    // News scanning — every cron run
+    try {
+      const articles = await fetchMarketNews();
+      const newsAlert = formatNewsAlert(articles);
+      if (newsAlert) alerts.push(newsAlert);
+    } catch (e) {
+      console.error('News scan error:', e.message);
     }
 
     // Send and log
