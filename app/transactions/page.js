@@ -21,7 +21,7 @@ export default function Transactions() {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
       setPortfolios(pfs);
       const params = new URLSearchParams(window.location.search);
-      const pid = params.get('portfolio') || pfs[0]?.id || 'furqan';
+      const pid = params.get('portfolio') || pfs[0]?.id || 'corolla';
       setActivePid(pid);
     });
   }, []);
@@ -104,6 +104,25 @@ export default function Transactions() {
   }
 
   const activePortfolio = portfolios.find(p => p.id === activePid);
+
+  // Per-coin summary (like CoinGecko)
+  const coinSummaries = {};
+  for (const t of transactions) {
+    if (!coinSummaries[t.coin]) coinSummaries[t.coin] = { buys: [], sells: [] };
+    if (t.type === 'buy') coinSummaries[t.coin].buys.push(t);
+    else coinSummaries[t.coin].sells.push(t);
+  }
+  const summaries = Object.entries(coinSummaries).map(([coin, { buys, sells }]) => {
+    const totalBought = buys.reduce((s, t) => s + t.amount, 0);
+    const totalSold = sells.reduce((s, t) => s + t.amount, 0);
+    const totalHeld = totalBought - totalSold;
+    const totalSpent = buys.reduce((s, t) => s + t.amount * t.pricePerCoin, 0);
+    const totalReceived = sells.reduce((s, t) => s + t.amount * t.pricePerCoin, 0);
+    const avgCost = totalBought > 0 ? totalSpent / totalBought : 0;
+    const numBuys = buys.length;
+    const numSells = sells.length;
+    return { coin, totalHeld, totalSpent, totalReceived, avgCost, numBuys, numSells };
+  });
 
   return (
     <div className="min-h-screen">
@@ -266,6 +285,45 @@ export default function Transactions() {
           </button>
         </form>
 
+        {/* Per-Coin Summary — CoinGecko style */}
+        {summaries.length > 0 && (
+          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-4">Portfolio Breakdown</h2>
+            <div className="space-y-3">
+              {summaries.map(({ coin, totalHeld, totalSpent, totalReceived, avgCost, numBuys, numSells }) => (
+                <div key={coin} className="bg-zinc-800/30 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-bold text-zinc-200">{coin}</span>
+                    <span className="text-[10px] text-zinc-500">
+                      {numBuys} buy{numBuys !== 1 ? 's' : ''}{numSells > 0 ? `, ${numSells} sell${numSells !== 1 ? 's' : ''}` : ''}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <p className="text-zinc-500">Holdings</p>
+                      <p className="font-mono text-zinc-200 mt-0.5">{fmtCoinAmt(totalHeld)} {coin}</p>
+                    </div>
+                    <div>
+                      <p className="text-zinc-500">Total cost</p>
+                      <p className="font-mono text-zinc-200 mt-0.5">{fmtUsd(totalSpent)}</p>
+                    </div>
+                    <div>
+                      <p className="text-zinc-500">Avg cost</p>
+                      <p className="font-mono text-zinc-200 mt-0.5">{fmtUsd(avgCost)}</p>
+                    </div>
+                    {totalReceived > 0 && (
+                      <div>
+                        <p className="text-zinc-500">Total sold</p>
+                        <p className="font-mono text-zinc-200 mt-0.5">{fmtUsd(totalReceived)}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Transaction History */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-4">Transaction History</h2>
@@ -319,4 +377,16 @@ export default function Transactions() {
       </main>
     </div>
   );
+}
+
+function fmtUsd(n) {
+  return n != null ? `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—';
+}
+
+function fmtCoinAmt(n) {
+  if (n == null || n === 0) return '0';
+  if (n >= 1000) return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(4);
+  if (n >= 0.001) return n.toFixed(6);
+  return n.toFixed(8);
 }

@@ -17,7 +17,7 @@ export default function Settings() {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
       setPortfolios(pfs);
       const params = new URLSearchParams(window.location.search);
-      const pid = params.get('portfolio') || pfs[0]?.id || 'furqan';
+      const pid = params.get('portfolio') || pfs[0]?.id || 'corolla';
       setActivePid(pid);
       setActivePortfolio(pfs.find(p => p.id === pid) || pfs[0]);
     });

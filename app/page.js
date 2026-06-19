@@ -18,7 +18,7 @@ export default function Dashboard() {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
       setPortfolios(pfs);
       const saved = typeof window !== 'undefined' && localStorage.getItem('activePid');
-      const initial = (saved && pfs.some(p => p.id === saved)) ? saved : pfs[0]?.id || 'furqan';
+      const initial = (saved && pfs.some(p => p.id === saved)) ? saved : pfs[0]?.id || 'corolla';
       setActivePid(initial);
     });
   }, []);
