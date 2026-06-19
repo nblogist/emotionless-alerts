@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [portfolios, setPortfolios] = useState([]);
   const [activePid, setActivePid] = useState(null);
+  const [alertsSeenAt, setAlertsSeenAt] = useState(null);
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -31,18 +32,21 @@ export default function Dashboard() {
     if (!activePid) return;
     if (isRefresh) setRefreshing(true);
     try {
-      const [pRes, cRes, sRes, nRes, aRes] = await Promise.all([
+      const [pRes, cRes, sRes, nRes, aRes, seenRes] = await Promise.all([
         fetch('/api/prices'),
         fetch(`/api/config?portfolio=${activePid}`),
         fetch('/api/status'),
         fetch('/api/news'),
         fetch('/api/activity'),
+        fetch('/api/alerts-seen'),
       ]);
       setPrices(await pRes.json());
       setConfig(await cRes.json());
       setStatus(await sRes.json());
       setNews(await nRes.json());
       setActivity(await aRes.json());
+      const seenData = await seenRes.json();
+      setAlertsSeenAt(seenData.seenAt);
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -121,7 +125,7 @@ export default function Dashboard() {
             </Link>
           </nav>
           {/* Mobile refresh only */}
-          <button onClick={() => fetchData(true)} disabled={refreshing}
+          <button onClick={() => fetchData(true)} disabled={refreshing} aria-label="Refresh prices"
             className="sm:hidden p-2 text-zinc-400 active:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50">
             <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -257,7 +261,7 @@ export default function Dashboard() {
 
             return (
               <div key={coin}
-                className={`bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 sm:p-5 hover:border-zinc-700/50 hover:bg-zinc-900/80 active:scale-[0.98] sm:active:scale-100 transition-all duration-200 animate-fade-up`}
+                className={`bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 sm:p-5 hover:border-zinc-700/50 hover:bg-zinc-900/80 hover:z-10 relative active:scale-[0.98] sm:active:scale-100 transition-all duration-200 animate-fade-up`}
                 style={{ animationDelay: `${100 + idx * 60}ms` }}
               >
                 {/* Header */}
@@ -304,7 +308,16 @@ export default function Dashboard() {
                   {/* Buy/Sell Zones */}
                   {cc.buyReference > 0 && (
                     <div className="border-t border-zinc-800/40 pt-2.5 sm:pt-3 mt-2.5 sm:mt-3 space-y-1.5 sm:space-y-2">
-                      <Tooltip block text={`Alert fires when price drops ${buyDropPct}% below your buy reference (${fmtPrice(cc.buyReference)}). After a buy, lower your buy reference to the fill price.`}>
+                      <Tooltip block text={(() => {
+                      const powder = config?.powderRemaining || 0;
+                      const deploy = Math.max(powder / 5, 0);
+                      const coinsToBuy = buyAt > 0 ? deploy / buyAt : 0;
+                      const newAvg = cc.holdingsUsd > 0
+                        ? (cc.holdingsUsd + deploy) / ((cc.holdingsUsd / cc.avgCost) + coinsToBuy)
+                        : buyAt;
+                      const cashAfter = powder - deploy;
+                      return `Buy at ${fmtPrice(buyAt)} (${buyDropPct}% below ref ${fmtPrice(cc.buyReference)})\n\nDeploy: ${fmtUsd(deploy)} → ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ~${fmtPrice(newAvg)}\nCash after: ${fmtUsd(cashAfter)}`;
+                    })()}>
                         <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                           nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
                         }`}>
@@ -318,7 +331,12 @@ export default function Dashboard() {
                       </Tooltip>
 
                       {cc.avgCost > 0 && (
-                        <Tooltip block text={`First trim trigger at +${((config?.firstSellPct || 0.4) * 100).toFixed(0)}% above your avg cost (${fmtPrice(cc.avgCost)}). Subsequent sells step up by +${((config?.sellStepPct || 0.1) * 100).toFixed(0)}% each.`}>
+                        <Tooltip block text={(() => {
+                          const sellPct = (config?.firstSellPct || 0.4) * 100;
+                          const stepPct = (config?.sellStepPct || 0.1) * 100;
+                          const trimValue = currentValue * 0.25;
+                          return `Sell at ${fmtPrice(sellAt)} (+${sellPct.toFixed(0)}% above avg ${fmtPrice(cc.avgCost)})\n\nTrim ~25%: ${fmtUsd(trimValue)} worth\nNext sell steps: +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%...`;
+                        })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
                           }`}>
@@ -473,8 +491,29 @@ export default function Dashboard() {
 
         {/* Activity Log */}
         <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '400ms' }}>
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Activity Log</h2>
-          <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Hourly price checks across all portfolios</p>
+          <div className="flex items-center justify-between mb-3 sm:mb-4">
+            <div>
+              <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Activity Log</h2>
+              <p className="text-[11px] text-zinc-500 mt-0.5">Hourly price checks across all portfolios</p>
+            </div>
+            {(() => {
+              const unseenAlerts = activity.filter(e => e.alertCount > 0 && (!alertsSeenAt || new Date(e.time) > new Date(alertsSeenAt)));
+              if (unseenAlerts.length === 0) return null;
+              return (
+                <button
+                  onClick={async () => {
+                    const res = await fetch('/api/alerts-seen', { method: 'POST' });
+                    const data = await res.json();
+                    setAlertsSeenAt(data.seenAt);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-[10px] sm:text-[11px] font-medium text-amber-300 transition-colors cursor-pointer"
+                >
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse-dot" />
+                  {unseenAlerts.length} new
+                </button>
+              );
+            })()}
+          </div>
           {activity.length === 0 ? (
             <div className="text-center py-6 sm:py-8">
               <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-zinc-800/60 flex items-center justify-center">
@@ -487,10 +526,14 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-1.5 max-h-64 sm:max-h-80 overflow-y-auto pr-1">
-              {activity.slice(0, 48).map((entry, i) => (
-                <div key={i} className="flex items-center gap-3 bg-zinc-800/20 hover:bg-zinc-800/30 rounded-xl px-3 py-2 sm:py-2.5 transition-colors">
+              {activity.slice(0, 48).map((entry, i) => {
+                const isUnseen = entry.alertCount > 0 && (!alertsSeenAt || new Date(entry.time) > new Date(alertsSeenAt));
+                return (
+                <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 sm:py-2.5 transition-colors ${
+                  isUnseen ? 'bg-amber-500/5 border border-amber-500/20' : 'bg-zinc-800/20 hover:bg-zinc-800/30'
+                }`}>
                   <span className={`w-2 h-2 rounded-full shrink-0 ${
-                    entry.alertCount > 0 ? 'bg-amber-400' : 'bg-emerald-600'
+                    isUnseen ? 'bg-amber-400 animate-pulse-dot' : entry.alertCount > 0 ? 'bg-amber-400' : 'bg-emerald-600'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -514,7 +557,8 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
