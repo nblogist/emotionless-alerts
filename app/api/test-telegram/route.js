@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
 import { sendTelegram } from '@/lib/telegram';
 import * as store from '@/lib/store';
-import { DEFAULT_CONFIG } from '@/lib/defaults';
+import { DEFAULT_PORTFOLIOS } from '@/lib/defaults';
 
-export async function POST() {
+export async function POST(request) {
   try {
-    const config = (await store.get('config')) || DEFAULT_CONFIG;
-    if (!config.telegramChatId) {
-      return NextResponse.json({ ok: false, error: 'No chat ID configured in settings' });
-    }
     if (!process.env.TELEGRAM_BOT_TOKEN) {
       return NextResponse.json({ ok: false, error: 'TELEGRAM_BOT_TOKEN env var not set' });
     }
-    const chatIds = config.telegramChatId.split(',').map(id => id.trim()).filter(Boolean);
-    for (const cid of chatIds) {
-      await sendTelegram(cid, 'Emotionless Alerts test message. Bot is connected and working.');
+
+    // Send test to all portfolios' chat IDs
+    const portfolios = (await store.get('portfolios')) || DEFAULT_PORTFOLIOS;
+    let sent = 0;
+    for (const pf of portfolios) {
+      const chatIds = (pf.telegramChatId || '').split(',').map(id => id.trim()).filter(Boolean);
+      for (const cid of chatIds) {
+        await sendTelegram(cid, `[${pf.name}] Emotionless Alerts test message. Bot is connected and working for this portfolio.`);
+        sent++;
+      }
     }
-    return NextResponse.json({ ok: true, sentTo: chatIds.length });
+    return NextResponse.json({ ok: true, sentTo: sent });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message });
   }

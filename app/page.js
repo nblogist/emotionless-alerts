@@ -10,12 +10,25 @@ export default function Dashboard() {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [portfolios, setPortfolios] = useState([]);
+  const [activePid, setActivePid] = useState(null);
+
+  // Load portfolio list on mount
+  useEffect(() => {
+    fetch('/api/portfolios').then(r => r.json()).then(pfs => {
+      setPortfolios(pfs);
+      const saved = typeof window !== 'undefined' && localStorage.getItem('activePid');
+      const initial = (saved && pfs.some(p => p.id === saved)) ? saved : pfs[0]?.id || 'furqan';
+      setActivePid(initial);
+    });
+  }, []);
 
   const fetchData = useCallback(async () => {
+    if (!activePid) return;
     try {
       const [pRes, cRes, sRes, nRes, aRes] = await Promise.all([
         fetch('/api/prices'),
-        fetch('/api/config'),
+        fetch(`/api/config?portfolio=${activePid}`),
         fetch('/api/status'),
         fetch('/api/news'),
         fetch('/api/activity'),
@@ -31,15 +44,22 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activePid]);
 
   useEffect(() => {
+    if (!activePid) return;
+    setLoading(true);
     fetchData();
     const iv = setInterval(fetchData, 60000);
     return () => clearInterval(iv);
-  }, [fetchData]);
+  }, [fetchData, activePid]);
 
-  if (loading) {
+  function switchPortfolio(pid) {
+    setActivePid(pid);
+    if (typeof window !== 'undefined') localStorage.setItem('activePid', pid);
+  }
+
+  if (loading || !activePid) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
@@ -49,21 +69,36 @@ export default function Dashboard() {
 
   const coins = config?.coins || {};
   const hasActiveAlerts = status?.alerts?.length > 0;
+  const activePortfolio = portfolios.find(p => p.id === activePid);
 
   return (
     <div className="min-h-screen">
       {/* Header */}
       <header className="border-b border-zinc-800/60 sticky top-0 z-10 bg-zinc-950/90 backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-lg font-bold tracking-tight">Emotionless Alerts</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-lg font-bold tracking-tight">Emotionless Alerts</h1>
+            {/* Portfolio Selector */}
+            {portfolios.length > 1 && (
+              <select
+                value={activePid}
+                onChange={(e) => switchPortfolio(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500"
+              >
+                {portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={fetchData} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
               Refresh
             </button>
-            <Link href="/transactions" className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
+            <Link href={`/transactions?portfolio=${activePid}`} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
               Transactions
             </Link>
-            <Link href="/settings" className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
+            <Link href={`/settings?portfolio=${activePid}`} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
               Settings
             </Link>
           </div>
@@ -73,6 +108,21 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-5">
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-300">{error}</div>
+        )}
+
+        {/* Portfolio Name Banner */}
+        {activePortfolio && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-lg border border-emerald-500/20">
+              {activePortfolio.name}
+            </span>
+            {activePortfolio.telegramChatId && (
+              <span className="text-[10px] text-zinc-600">TG alerts on</span>
+            )}
+            {activePortfolio.alertEmail && (
+              <span className="text-[10px] text-zinc-600">Email alerts on</span>
+            )}
+          </div>
         )}
 
         {/* Status Banner */}
@@ -87,7 +137,7 @@ export default function Dashboard() {
               : 'All quiet. No action needed right now.'}
           </p>
           <p className="text-xs text-zinc-500 mt-1">
-            Bot checks prices every hour and sends you a Telegram + email alert only when something needs attention.
+            Bot checks prices every hour and sends alerts to each portfolio&apos;s Telegram + email when something needs attention.
           </p>
         </div>
 
@@ -96,13 +146,13 @@ export default function Dashboard() {
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Your Money</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div>
-              <Tip text="The total amount of money you've set aside for crypto investing.">
+              <Tip text="The total amount of money you've set aside for crypto investing in this portfolio.">
                 <p className="text-xs text-zinc-500">Total Budget</p>
               </Tip>
               <p className="text-lg font-mono font-bold">{fmt(config?.totalCapital)}</p>
             </div>
             <div>
-              <Tip text="The total USD value of all your current crypto positions combined.">
+              <Tip text="The total USD value of all your current crypto positions combined in this portfolio.">
                 <p className="text-xs text-zinc-500">Invested So Far</p>
               </Tip>
               <p className="text-lg font-mono font-bold">
@@ -129,15 +179,14 @@ export default function Dashboard() {
           {Object.entries(coins).map(([coin, cc]) => {
             const price = prices?.[coin];
             if (!price) return null;
-            const pnl = ((price - cc.avgCost) / cc.avgCost) * 100;
+            const pnl = cc.avgCost ? ((price - cc.avgCost) / cc.avgCost) * 100 : 0;
             const buyAt = cc.buyReference * (1 - (config?.buyBandPct || 0.07));
             const sellAt = cc.avgCost * (1 + (config?.firstSellPct || 0.4));
-            const nearBuy = price <= buyAt;
-            const nearSell = price >= sellAt;
+            const nearBuy = cc.buyReference > 0 && price <= buyAt;
+            const nearSell = cc.avgCost > 0 && price >= sellAt;
 
             return (
               <div key={coin} className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-                {/* Coin name + price */}
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <p className="text-xs text-zinc-500 font-medium">{coin}</p>
@@ -145,65 +194,68 @@ export default function Dashboard() {
                       {fmtPrice(price)}
                     </p>
                   </div>
-                  <Tip text={`Your profit/loss. You bought ${coin} at an average of ${fmtPrice(cc.avgCost)} and it's now ${fmtPrice(price)}. ${pnl >= 0 ? 'You are in profit.' : 'You are at a loss — this is normal during dips.'}`}>
-                    <span className={`text-xs font-mono font-semibold px-2 py-1 rounded-md ${
-                      pnl >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                    }`}>
-                      {pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%
-                    </span>
-                  </Tip>
+                  {cc.avgCost > 0 && (
+                    <Tip text={`Your profit/loss. You bought ${coin} at an average of ${fmtPrice(cc.avgCost)} and it's now ${fmtPrice(price)}. ${pnl >= 0 ? 'You are in profit.' : 'You are at a loss — this is normal during dips.'}`}>
+                      <span className={`text-xs font-mono font-semibold px-2 py-1 rounded-md ${
+                        pnl >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                      }`}>
+                        {pnl >= 0 ? '+' : ''}{pnl.toFixed(1)}%
+                      </span>
+                    </Tip>
+                  )}
                 </div>
 
-                {/* Simple stats */}
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between">
                     <Tip text={`The weighted average price of all your ${coin} buys. Example: if you bought 0.01 BTC at $90k and 0.01 at $80k, your avg cost is $85k.`}>
                       <span className="text-zinc-500">You bought at (avg)</span>
                     </Tip>
-                    <span className="font-mono">{fmtPrice(cc.avgCost)}</span>
+                    <span className="font-mono">{cc.avgCost > 0 ? fmtPrice(cc.avgCost) : '—'}</span>
                   </div>
                   <div className="flex justify-between">
                     <Tip text={`Total USD value of your ${coin} position based on your average cost. Add transactions to update this automatically.`}>
                       <span className="text-zinc-500">You hold</span>
                     </Tip>
-                    <span className="font-mono">{fmt(cc.holdingsUsd)}</span>
+                    <span className="font-mono">{cc.holdingsUsd > 0 ? fmt(cc.holdingsUsd) : '—'}</span>
                   </div>
 
-                  <div className="border-t border-zinc-800/50 pt-3 space-y-2">
-                    {/* Buy signal */}
-                    <Tip text={nearBuy
-                      ? `${coin} is in the BUY ZONE! The price dropped 7%+ below your last buy reference of ${fmtPrice(cc.buyReference)}. The strategy says: deploy your next rung of cash now.`
-                      : `${coin} needs to drop to ${fmtPrice(buyAt)} before you should buy more. This is 7% below your last buy reference of ${fmtPrice(cc.buyReference)}. Example: if you bought BTC at $100k, the next buy triggers at $93k.`
-                    }>
-                      <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
-                        nearBuy ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-zinc-800/30'
-                      }`}>
-                        <span className={`text-xs ${nearBuy ? 'text-blue-300 font-medium' : 'text-zinc-500'}`}>
-                          {nearBuy ? 'BUY ZONE' : 'Next buy if price drops to'}
-                        </span>
-                        <span className={`font-mono text-xs ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-400'}`}>
-                          {fmtPrice(buyAt)}
-                        </span>
-                      </div>
-                    </Tip>
+                  {cc.buyReference > 0 && (
+                    <div className="border-t border-zinc-800/50 pt-3 space-y-2">
+                      <Tip text={nearBuy
+                        ? `${coin} is in the BUY ZONE! The price dropped 7%+ below your last buy reference of ${fmtPrice(cc.buyReference)}. The strategy says: deploy your next rung of cash now.`
+                        : `${coin} needs to drop to ${fmtPrice(buyAt)} before you should buy more. This is 7% below your last buy reference of ${fmtPrice(cc.buyReference)}.`
+                      }>
+                        <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
+                          nearBuy ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-zinc-800/30'
+                        }`}>
+                          <span className={`text-xs ${nearBuy ? 'text-blue-300 font-medium' : 'text-zinc-500'}`}>
+                            {nearBuy ? 'BUY ZONE' : 'Next buy if price drops to'}
+                          </span>
+                          <span className={`font-mono text-xs ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-400'}`}>
+                            {fmtPrice(buyAt)}
+                          </span>
+                        </div>
+                      </Tip>
 
-                    {/* Sell signal */}
-                    <Tip text={nearSell
-                      ? `${coin} is in the SELL ZONE! Price is +40%+ above your avg cost of ${fmtPrice(cc.avgCost)}. The strategy says: sell 15% of your position to lock in profit, keep the rest riding.`
-                      : `${coin} needs to rise to ${fmtPrice(sellAt)} before you should take profit. This is +40% above your avg cost of ${fmtPrice(cc.avgCost)}. Example: if your avg cost is $1,000, first sell triggers at $1,400.`
-                    }>
-                      <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
-                        nearSell ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-zinc-800/30'
-                      }`}>
-                        <span className={`text-xs ${nearSell ? 'text-orange-300 font-medium' : 'text-zinc-500'}`}>
-                          {nearSell ? 'SELL ZONE — take 15% off' : 'First sell if price rises to'}
-                        </span>
-                        <span className={`font-mono text-xs ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-400'}`}>
-                          {fmtPrice(sellAt)}
-                        </span>
-                      </div>
-                    </Tip>
-                  </div>
+                      {cc.avgCost > 0 && (
+                        <Tip text={nearSell
+                          ? `${coin} is in the SELL ZONE! Price is +40%+ above your avg cost of ${fmtPrice(cc.avgCost)}. The strategy says: sell 15% of your position to lock in profit.`
+                          : `${coin} needs to rise to ${fmtPrice(sellAt)} before you should take profit. This is +40% above your avg cost of ${fmtPrice(cc.avgCost)}.`
+                        }>
+                          <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
+                            nearSell ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-zinc-800/30'
+                          }`}>
+                            <span className={`text-xs ${nearSell ? 'text-orange-300 font-medium' : 'text-zinc-500'}`}>
+                              {nearSell ? 'SELL ZONE — take 15% off' : 'First sell if price rises to'}
+                            </span>
+                            <span className={`font-mono text-xs ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-400'}`}>
+                              {fmtPrice(sellAt)}
+                            </span>
+                          </div>
+                        </Tip>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -213,36 +265,36 @@ export default function Dashboard() {
         {/* Safety Checks */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Safety Checks</h2>
-          <p className="text-xs text-zinc-600 mb-4">These run automatically. You get a Telegram + email alert if any trigger.</p>
+          <p className="text-xs text-zinc-600 mb-4">These run automatically for each portfolio. You get alerts on your own Telegram + email.</p>
           <div className="space-y-2">
             <CheckRow
               label="Drawdown Warning"
               desc="Price drops -20%, -35%, or -50% from all-time high"
-              tooltip="Tracks how far each coin has fallen from its highest price. At -20%: keep buying dips. At -35% or -50%: STOP buying and wait for a floor. Example: BTC hit $100k then dropped to $65k = -35% drawdown."
+              tooltip="Tracks how far each coin has fallen from its highest price. At -20%: keep buying dips. At -35% or -50%: STOP buying and wait for a floor."
               active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
             />
             <CheckRow
               label="Floor Confirmed"
               desc="After a deep crash, price holds above the bottom for 2 weeks"
-              tooltip="After a -35% or -50% crash, if the price closes above the lowest point for 2 consecutive weeks, the crash is likely over. This unlocks your Emergency Reserve to buy at the bottom. Example: BTC crashes to $40k, then closes at $42k and $43k two weeks in a row = floor confirmed."
+              tooltip="After a -35% or -50% crash, if the price closes above the lowest point for 2 consecutive weeks, the crash is likely over. This unlocks your Emergency Reserve."
               active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
             />
             <CheckRow
               label="Thesis Break"
               desc="BTC closes below its 200-week moving average for 2 weeks (stop buying)"
-              tooltip="The 200-week moving average is BTC's long-term support line. If BTC closes below it for 2 weeks in a row, the bull thesis may be broken. Action: STOP all buying, just hold what you have. Resume buying when BTC closes back above. This has only happened a few times in BTC history."
+              tooltip="The 200-week moving average is BTC's long-term support line. If BTC closes below it for 2 weeks in a row, the bull thesis may be broken. Action: STOP all buying."
               active={status?.rules?.thesisBreak}
             />
             <CheckRow
               label="Upside Breakout"
               desc={`BTC weekly close above $${(config?.upsideBreakUsd || 90000).toLocaleString()} (deploy 40% of cash)`}
-              tooltip={`If BTC closes a week above $${(config?.upsideBreakUsd || 90000).toLocaleString()}, the downtrend is over and momentum is back. Action: deploy 40% of your remaining cash at market price immediately. Don't wait for a dip. You can change this threshold in Settings.`}
+              tooltip={`If BTC closes a week above $${(config?.upsideBreakUsd || 90000).toLocaleString()}, the downtrend is over. Action: deploy 40% of your remaining cash at market price immediately.`}
               active={status?.rules?.upsideBreak}
             />
             <CheckRow
               label="Monthly Review"
               desc="Reminder on the 1st of each month to review your positions"
-              tooltip="On the 1st of every month, you get a summary of all your positions, profit/loss, and remaining cash. Take 10 minutes to review and make sure your plan still makes sense."
+              tooltip="On the 1st of every month, you get a summary of all your positions, profit/loss, and remaining cash."
               active={false}
               isInfo
             />
@@ -251,7 +303,7 @@ export default function Dashboard() {
 
         {/* 200-Week MA */}
         {status?.ma200 && (
-          <Tip text="The 200-week moving average is the average BTC price over the last ~4 years. If BTC is above it, the long-term trend is healthy. If below for 2+ weeks, the strategy says stop buying. Think of it as BTC's long-term heartbeat.">
+          <Tip text="The 200-week moving average is the average BTC price over the last ~4 years. If BTC is above it, the long-term trend is healthy.">
             <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <p className="text-xs text-zinc-500">BTC 200-Week Moving Average</p>
@@ -272,7 +324,7 @@ export default function Dashboard() {
         {news.length > 0 && (
           <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
             <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Market News</h2>
-            <p className="text-xs text-zinc-600 mb-3">High-impact news from the last 24 hours that could affect your positions.</p>
+            <p className="text-xs text-zinc-600 mb-3">High-impact news from the last 24 hours.</p>
             <div className="space-y-2">
               {news.map((a, i) => (
                 <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
@@ -303,7 +355,7 @@ export default function Dashboard() {
               {status.alerts.map((a, i) => (
                 <div key={i} className="bg-zinc-800/30 rounded-lg p-3">
                   <p className="text-xs text-zinc-500">{new Date(a.time).toLocaleString()}</p>
-                  <p className="text-sm text-zinc-200 mt-1">{a.message}</p>
+                  <p className="text-sm text-zinc-200 mt-1 whitespace-pre-line">{a.message}</p>
                 </div>
               ))}
             </div>
@@ -313,7 +365,7 @@ export default function Dashboard() {
         {/* Activity Log */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Activity Log</h2>
-          <p className="text-xs text-zinc-600 mb-3">Every hour, the bot checks prices and evaluates all rules. Here&apos;s what happened.</p>
+          <p className="text-xs text-zinc-600 mb-3">Every hour, the bot checks prices across all portfolios.</p>
           {activity.length === 0 ? (
             <p className="text-zinc-600 text-sm py-4 text-center">
               No activity yet. The bot will log its first check on the next hourly cron run.

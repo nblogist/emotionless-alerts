@@ -7,6 +7,8 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+  const [portfolios, setPortfolios] = useState([]);
+  const [activePid, setActivePid] = useState(null);
   const [form, setForm] = useState({
     coin: 'BTC',
     type: 'buy',
@@ -16,11 +18,27 @@ export default function Transactions() {
   });
 
   useEffect(() => {
-    fetch('/api/transactions')
+    fetch('/api/portfolios').then(r => r.json()).then(pfs => {
+      setPortfolios(pfs);
+      const params = new URLSearchParams(window.location.search);
+      const pid = params.get('portfolio') || pfs[0]?.id || 'furqan';
+      setActivePid(pid);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activePid) return;
+    setLoading(true);
+    fetch(`/api/transactions?portfolio=${activePid}`)
       .then((r) => r.json())
       .then((t) => { setTransactions(Array.isArray(t) ? t : []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }, [activePid]);
+
+  function switchPortfolio(pid) {
+    setActivePid(pid);
+    window.history.replaceState(null, '', `?portfolio=${pid}`);
+  }
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -42,6 +60,7 @@ export default function Transactions() {
           ...form,
           amount: parseFloat(form.amount),
           pricePerCoin: parseFloat(form.pricePerCoin),
+          portfolio: activePid,
         }),
       });
       const data = await res.json();
@@ -65,7 +84,7 @@ export default function Transactions() {
       const res = await fetch('/api/transactions', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ index }),
+        body: JSON.stringify({ index, portfolio: activePid }),
       });
       if (res.ok) {
         setTransactions((prev) => prev.filter((_, i) => i !== index));
@@ -76,18 +95,15 @@ export default function Transactions() {
     }
   }
 
-  const totalUsd = (coin, type) =>
-    transactions
-      .filter((t) => t.coin === coin && t.type === type)
-      .reduce((s, t) => s + t.amount * t.pricePerCoin, 0);
-
-  if (loading) {
+  if (loading || !activePid) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
       </div>
     );
   }
+
+  const activePortfolio = portfolios.find(p => p.id === activePid);
 
   return (
     <div className="min-h-screen">
@@ -108,14 +124,34 @@ export default function Transactions() {
           <div className="flex items-center gap-4">
             <Link href="/" className="text-zinc-500 hover:text-zinc-300 transition-colors text-sm">&larr; Dashboard</Link>
             <h1 className="text-lg font-bold">Transactions</h1>
+            {portfolios.length > 1 && (
+              <select
+                value={activePid}
+                onChange={(e) => switchPortfolio(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500"
+              >
+                {portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        {/* Portfolio badge */}
+        {activePortfolio && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-lg border border-emerald-500/20">
+              {activePortfolio.name}
+            </span>
+          </div>
+        )}
+
         {/* Explainer */}
         <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 text-sm text-blue-300/80">
-          Log your buys and sells here — just like CoinGecko portfolio. Your <strong>average cost</strong>, <strong>holdings</strong>, and <strong>buy reference</strong> are all calculated automatically from your transactions.
+          Log your buys and sells here — just like CoinGecko portfolio. Your <strong>average cost</strong>, <strong>holdings</strong>, and <strong>buy reference</strong> are all calculated automatically from your transactions. Each portfolio tracks its own transactions separately.
         </div>
 
         {/* Add Transaction Form */}
@@ -278,7 +314,7 @@ export default function Transactions() {
         </div>
 
         <footer className="text-center text-[11px] text-zinc-700 pt-2 pb-8">
-          Transactions auto-calculate your holdings, average cost, and buy reference.
+          Transactions auto-calculate your holdings, average cost, and buy reference per portfolio.
         </footer>
       </main>
     </div>

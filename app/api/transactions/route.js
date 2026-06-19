@@ -51,9 +51,10 @@ function recalculateConfig(config, transactions) {
   return config;
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const transactions = (await store.get('transactions')) || [];
+    const pid = request.nextUrl.searchParams.get('portfolio') || 'furqan';
+    const transactions = (await store.get(`transactions:${pid}`)) || (await store.get('transactions')) || [];
     return NextResponse.json(transactions);
   } catch (error) {
     return NextResponse.json(
@@ -66,7 +67,8 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const { coin, type, amount, pricePerCoin, date } = body;
+    const { coin, type, amount, pricePerCoin, date, portfolio } = body;
+    const pid = portfolio || 'furqan';
 
     if (!coin || !type || !amount || !pricePerCoin) {
       return NextResponse.json(
@@ -91,18 +93,18 @@ export async function POST(request) {
       createdAt: new Date().toISOString(),
     };
 
-    const transactions = (await store.get('transactions')) || [];
+    const transactions = (await store.get(`transactions:${pid}`)) || [];
     transactions.push(transaction);
-    await store.set('transactions', transactions);
+    await store.set(`transactions:${pid}`, transactions);
 
-    let config = (await store.get('config')) || { ...DEFAULT_CONFIG };
+    let config = (await store.get(`config:${pid}`)) || { ...DEFAULT_CONFIG };
 
     if (!config.coins[coin]) {
       config.coins[coin] = { holdingsUsd: 0, avgCost: 0, buyReference: 0 };
     }
 
     config = recalculateConfig(config, transactions);
-    await store.set('config', config);
+    await store.set(`config:${pid}`, config);
 
     return NextResponse.json({ success: true, transaction, config });
   } catch (error) {
@@ -116,7 +118,8 @@ export async function POST(request) {
 export async function DELETE(request) {
   try {
     const body = await request.json();
-    const { index } = body;
+    const { index, portfolio } = body;
+    const pid = portfolio || 'furqan';
 
     if (index === undefined || index === null) {
       return NextResponse.json(
@@ -125,7 +128,7 @@ export async function DELETE(request) {
       );
     }
 
-    const transactions = (await store.get('transactions')) || [];
+    const transactions = (await store.get(`transactions:${pid}`)) || [];
 
     if (index < 0 || index >= transactions.length) {
       return NextResponse.json(
@@ -135,11 +138,11 @@ export async function DELETE(request) {
     }
 
     transactions.splice(index, 1);
-    await store.set('transactions', transactions);
+    await store.set(`transactions:${pid}`, transactions);
 
-    let config = (await store.get('config')) || { ...DEFAULT_CONFIG };
+    let config = (await store.get(`config:${pid}`)) || { ...DEFAULT_CONFIG };
     config = recalculateConfig(config, transactions);
-    await store.set('config', config);
+    await store.set(`config:${pid}`, config);
 
     return NextResponse.json({ success: true, transactions, config });
   } catch (error) {

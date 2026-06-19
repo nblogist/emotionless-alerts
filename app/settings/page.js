@@ -8,13 +8,31 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
   const [testResult, setTestResult] = useState(null);
+  const [portfolios, setPortfolios] = useState([]);
+  const [activePid, setActivePid] = useState(null);
+  const [activePortfolio, setActivePortfolio] = useState(null);
+  const [pfSaving, setPfSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/config')
+    fetch('/api/portfolios').then(r => r.json()).then(pfs => {
+      setPortfolios(pfs);
+      const params = new URLSearchParams(window.location.search);
+      const pid = params.get('portfolio') || pfs[0]?.id || 'furqan';
+      setActivePid(pid);
+      setActivePortfolio(pfs.find(p => p.id === pid) || pfs[0]);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activePid) return;
+    setLoading(true);
+    fetch(`/api/config?portfolio=${activePid}`)
       .then((r) => r.json())
       .then((c) => { setConfig(c); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+    const pf = portfolios.find(p => p.id === activePid);
+    if (pf) setActivePortfolio(pf);
+  }, [activePid, portfolios]);
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -24,7 +42,7 @@ export default function Settings() {
   async function handleSave() {
     setSaving(true);
     try {
-      const res = await fetch('/api/config', {
+      const res = await fetch(`/api/config?portfolio=${activePid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
@@ -35,6 +53,25 @@ export default function Settings() {
       showToast('Save failed', 'error');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSavePortfolio() {
+    setPfSaving(true);
+    try {
+      const res = await fetch('/api/portfolios', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(activePortfolio),
+      });
+      if (res.ok) {
+        showToast('Portfolio settings saved');
+        setPortfolios(prev => prev.map(p => p.id === activePortfolio.id ? activePortfolio : p));
+      } else showToast('Save failed', 'error');
+    } catch {
+      showToast('Save failed', 'error');
+    } finally {
+      setPfSaving(false);
     }
   }
 
@@ -49,6 +86,11 @@ export default function Settings() {
     }
   }
 
+  function switchPortfolio(pid) {
+    setActivePid(pid);
+    window.history.replaceState(null, '', `?portfolio=${pid}`);
+  }
+
   function update(path, value) {
     setConfig((prev) => {
       const next = JSON.parse(JSON.stringify(prev));
@@ -60,7 +102,7 @@ export default function Settings() {
     });
   }
 
-  if (loading) {
+  if (loading || !activePid) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
@@ -87,13 +129,19 @@ export default function Settings() {
       <header className="border-b border-zinc-800/60 sticky top-0 z-10 bg-zinc-950/80 backdrop-blur-sm">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Link
-              href="/"
-              className="text-zinc-500 hover:text-zinc-300 transition-colors text-sm"
-            >
-              &larr; Dashboard
-            </Link>
+            <Link href="/" className="text-zinc-500 hover:text-zinc-300 transition-colors text-sm">&larr; Dashboard</Link>
             <h1 className="text-lg font-bold">Settings</h1>
+            {portfolios.length > 1 && (
+              <select
+                value={activePid}
+                onChange={(e) => switchPortfolio(e.target.value)}
+                className="bg-zinc-800 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500"
+              >
+                {portfolios.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
           </div>
           <button
             onClick={handleSave}
@@ -106,8 +154,65 @@ export default function Settings() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-5">
+        {/* Portfolio Alert Settings */}
+        {activePortfolio && (
+          <Section title="Portfolio Alert Channels">
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm text-zinc-300">Portfolio Name</label>
+                <input
+                  type="text"
+                  value={activePortfolio.name}
+                  onChange={(e) => setActivePortfolio(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full mt-1 bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500"
+                />
+              </div>
+              <div>
+                <label className="text-sm text-zinc-300">Telegram Chat ID</label>
+                <input
+                  type="text"
+                  value={activePortfolio.telegramChatId || ''}
+                  onChange={(e) => setActivePortfolio(prev => ({ ...prev, telegramChatId: e.target.value }))}
+                  className="w-full mt-1 bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-zinc-500"
+                  placeholder="687179551"
+                />
+                <p className="text-[10px] text-zinc-600 mt-1">Alerts for this portfolio go to this Telegram. Comma-separate for multiple.</p>
+              </div>
+              <div>
+                <label className="text-sm text-zinc-300">Alert Email</label>
+                <input
+                  type="email"
+                  value={activePortfolio.alertEmail || ''}
+                  onChange={(e) => setActivePortfolio(prev => ({ ...prev, alertEmail: e.target.value }))}
+                  className="w-full mt-1 bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500"
+                  placeholder="you@example.com"
+                />
+                <p className="text-[10px] text-zinc-600 mt-1">Email alerts for this portfolio go here.</p>
+              </div>
+              <button
+                onClick={handleSavePortfolio}
+                disabled={pfSaving}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/50 rounded-lg text-sm transition-all disabled:opacity-50"
+              >
+                {pfSaving ? 'Saving...' : 'Save Portfolio Settings'}
+              </button>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={handleTestTelegram}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/50 rounded-lg text-sm transition-all"
+                >
+                  Send Test Telegram
+                </button>
+                {testResult && (
+                  <span className="text-sm text-zinc-400">{testResult}</span>
+                )}
+              </div>
+            </div>
+          </Section>
+        )}
+
         {/* Portfolio */}
-        <Section title="Portfolio">
+        <Section title="Portfolio Capital">
           <Field
             label="Total Capital"
             value={config?.totalCapital}
@@ -194,33 +299,6 @@ export default function Settings() {
           </Section>
         ))}
 
-        {/* Telegram */}
-        <Section title="Telegram">
-          <Field
-            label="Chat ID"
-            value={config?.telegramChatId}
-            onChange={(v) => update('telegramChatId', v)}
-            type="text"
-            hint="Your numeric Telegram chat ID"
-          />
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              onClick={handleTestTelegram}
-              className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/50 rounded-lg text-sm transition-all"
-            >
-              Send Test Message
-            </button>
-            {testResult && (
-              <span className="text-sm text-zinc-400">{testResult}</span>
-            )}
-          </div>
-          <p className="text-xs text-zinc-600 mt-1">
-            Set <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-400">TELEGRAM_BOT_TOKEN</code> in
-            Vercel env vars. Create a bot via{' '}
-            <span className="text-zinc-400">@BotFather</span> on Telegram.
-          </p>
-        </Section>
-
         {/* How-to */}
         <Section title="How to Update After a Trade">
           <div className="text-sm text-zinc-400 space-y-2">
@@ -235,15 +313,14 @@ export default function Settings() {
               Update <em>Holdings</em> to reflect the trimmed position.
             </p>
             <p>
-              <strong className="text-zinc-300">To pause the bot:</strong> Remove
-              the cron schedule in <code className="bg-zinc-800 px-1 py-0.5 rounded text-zinc-400">vercel.json</code>{' '}
-              and redeploy, or disable the cron in the Vercel dashboard.
+              <strong className="text-zinc-300">Or just use Transactions:</strong>{' '}
+              Log buys and sells in the Transactions page — everything is calculated automatically.
             </p>
           </div>
         </Section>
 
         <footer className="text-center text-[11px] text-zinc-700 pt-4 pb-8">
-          Changes are saved to KV store. The cron job reads your latest config each run.
+          Changes are saved per portfolio. The cron job reads your latest config each run.
         </footer>
       </main>
     </div>
