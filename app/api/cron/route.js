@@ -5,7 +5,7 @@ import { getLivePrices, fetchWeeklyCloses } from '@/lib/prices';
 import * as rules from '@/lib/rules';
 import { sendTelegram } from '@/lib/telegram';
 import { sendEmail } from '@/lib/email';
-import { fetchMarketNews, formatNewsAlert } from '@/lib/news';
+import { fetchAllRecentNews, fetchMarketNews, analyzeNewsWithAI, formatAINewsAlert, formatNewsAlert } from '@/lib/news';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,11 +66,32 @@ export async function GET(request) {
         ? btcCloses.slice(-200).reduce((a, b) => a + b, 0) / 200
         : null;
 
-    // News scanning — shared across portfolios
+    // News scanning — AI-powered with keyword fallback
     let newsAlert = null;
+    let aiAnalysis = null;
     try {
-      const articles = await fetchMarketNews();
-      newsAlert = formatNewsAlert(articles);
+      const allArticles = await fetchAllRecentNews();
+
+      if (process.env.OPENROUTER_API_KEY && allArticles.length > 0) {
+        aiAnalysis = await analyzeNewsWithAI(allArticles, [...allCoins]);
+        if (aiAnalysis && aiAnalysis.length > 0) {
+          // Cache AI analysis for dashboard display
+          await store.set('aiNewsAnalysis', {
+            analysis: aiAnalysis,
+            timestamp: now.toISOString(),
+          });
+          newsAlert = formatAINewsAlert(aiAnalysis);
+          console.log(`AI news scan: ${aiAnalysis.length} relevant headline(s)`);
+        } else {
+          console.log('AI news scan: no material headlines');
+        }
+      }
+
+      // Fallback to keyword filter if AI unavailable or returned nothing
+      if (!newsAlert) {
+        const keywordArticles = await fetchMarketNews();
+        newsAlert = formatNewsAlert(keywordArticles);
+      }
     } catch (e) {
       console.error('News scan error:', e.message);
     }
@@ -156,13 +177,14 @@ export async function GET(request) {
       alertCount: totalAlerts,
       portfolioCount: portfolios.length,
       prices: Object.fromEntries([...allCoins].map((c) => [c, prices[c] || null])),
+      aiNews: aiAnalysis ? aiAnalysis.length : 0,
       summary: totalAlerts > 0
         ? `${totalAlerts} alert(s) across ${portfolios.length} portfolio(s)`
         : `All quiet across ${portfolios.length} portfolio(s)`,
     };
     await store.lpush('activityLog', logEntry);
 
-    return NextResponse.json({ ok: true, alerts: totalAlerts, portfolios: portfolios.length, prices });
+    return NextResponse.json({ ok: true, alerts: totalAlerts, portfolios: portfolios.length, prices, aiNews: aiAnalysis?.length || 0 });
   } catch (err) {
     console.error('Cron error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

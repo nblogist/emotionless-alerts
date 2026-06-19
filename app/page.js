@@ -1,6 +1,10 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { COIN_COLORS, DEFAULT_COLOR } from '@/lib/coins';
+import { fmtUsd as fmt, fmtPrice, fmtCoinAmt } from '@/lib/format';
+import BottomNav from '@/components/BottomNav';
+import Tooltip from '@/components/Tooltip';
 
 export default function Dashboard() {
   const [prices, setPrices] = useState(null);
@@ -9,11 +13,11 @@ export default function Dashboard() {
   const [news, setNews] = useState([]);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [portfolios, setPortfolios] = useState([]);
   const [activePid, setActivePid] = useState(null);
 
-  // Load portfolio list on mount
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
       setPortfolios(pfs);
@@ -23,8 +27,9 @@ export default function Dashboard() {
     });
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (isRefresh = false) => {
     if (!activePid) return;
+    if (isRefresh) setRefreshing(true);
     try {
       const [pRes, cRes, sRes, nRes, aRes] = await Promise.all([
         fetch('/api/prices'),
@@ -43,6 +48,7 @@ export default function Dashboard() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [activePid]);
 
@@ -61,8 +67,9 @@ export default function Dashboard() {
 
   if (loading || !activePid) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-zinc-700 border-t-emerald-500 rounded-full animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        <div className="w-10 h-10 border-2 border-zinc-800 border-t-emerald-500 rounded-full animate-spin" />
+        <p className="text-xs text-zinc-600">Loading portfolio...</p>
       </div>
     );
   }
@@ -72,18 +79,22 @@ export default function Dashboard() {
   const activePortfolio = portfolios.find(p => p.id === activePid);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen pb-20 sm:pb-0">
       {/* Header */}
-      <header className="border-b border-zinc-800/60 sticky top-0 z-10 bg-zinc-950/90 backdrop-blur-sm">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex justify-between items-center">
+      <header className="border-b border-zinc-800/40 sticky top-0 z-20 bg-zinc-950/80 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <h1 className="text-lg font-bold tracking-tight">Emotionless Alerts</h1>
-            {/* Portfolio Selector */}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 animate-glow">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+              </svg>
+            </div>
+            <h1 className="text-base font-bold tracking-tight hidden sm:block">Emotionless Alerts</h1>
             {portfolios.length > 1 && (
               <select
                 value={activePid}
                 onChange={(e) => switchPortfolio(e.target.value)}
-                className="bg-zinc-800 border border-zinc-700/50 rounded-lg px-2 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500"
+                className="bg-zinc-800/80 border border-zinc-700/40 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/50 cursor-pointer transition-colors"
               >
                 {portfolios.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -91,57 +102,61 @@ export default function Dashboard() {
               </select>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={fetchData} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
-              Refresh
+          {/* Desktop nav */}
+          <nav className="hidden sm:flex items-center gap-1.5">
+            <button onClick={() => fetchData(true)} disabled={refreshing}
+              className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/30 transition-all cursor-pointer disabled:opacity-50">
+              {refreshing ? (
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 border border-zinc-500 border-t-zinc-200 rounded-full animate-spin" />
+                  Refreshing
+                </span>
+              ) : 'Refresh'}
             </button>
-            <Link href={`/transactions?portfolio=${activePid}`} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
+            <Link href={`/transactions?portfolio=${activePid}`} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/30 transition-all">
               Transactions
             </Link>
-            <Link href={`/settings?portfolio=${activePid}`} className="px-3 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 rounded-lg border border-zinc-700/50">
+            <Link href={`/settings?portfolio=${activePid}`} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/30 transition-all">
               Settings
             </Link>
-          </div>
+          </nav>
+          {/* Mobile refresh only */}
+          <button onClick={() => fetchData(true)} disabled={refreshing}
+            className="sm:hidden p-2 text-zinc-400 active:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50">
+            <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+          </button>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-5">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-sm text-red-300">{error}</div>
-        )}
-
-        {/* Portfolio Name Banner */}
-        {activePortfolio && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-lg border border-emerald-500/20">
-              {activePortfolio.name}
-            </span>
-            {activePortfolio.telegramChatId && (
-              <span className="text-[10px] text-zinc-500">TG alerts on</span>
-            )}
-            {activePortfolio.alertEmail && (
-              <span className="text-[10px] text-zinc-500">Email alerts on</span>
-            )}
-          </div>
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-sm text-red-300 animate-fade-up">{error}</div>
         )}
 
         {/* Status Banner */}
-        <div className={`rounded-xl p-4 text-center ${
+        <div className={`rounded-2xl p-4 sm:p-5 animate-fade-up ${
           hasActiveAlerts
-            ? 'bg-amber-500/10 border border-amber-500/30'
-            : 'bg-emerald-500/5 border border-emerald-500/20'
+            ? 'bg-amber-500/[0.07] border border-amber-500/25'
+            : 'bg-emerald-500/[0.04] border border-emerald-500/15'
         }`}>
-          <p className={`text-sm font-semibold ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
-            {hasActiveAlerts
-              ? `${status.alerts.length} alert(s) fired recently. Check below.`
-              : 'All quiet. No action needed right now.'}
-          </p>
-          <p className="text-xs text-zinc-400 mt-1">
-            Bot checks prices every hour and sends alerts to each portfolio&apos;s Telegram + email when something needs attention.
-          </p>
+          <div className="flex items-center gap-3">
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 animate-pulse-dot ${hasActiveAlerts ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+            <div>
+              <p className={`text-sm font-semibold ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
+                {hasActiveAlerts
+                  ? `${status.alerts.length} alert${status.alerts.length > 1 ? 's' : ''} fired recently`
+                  : 'All quiet \u2014 no action needed'}
+              </p>
+              <p className="text-[11px] text-zinc-500 mt-0.5">
+                Prices checked hourly. Alerts go to {activePortfolio?.name || 'your'} Telegram + email.
+              </p>
+            </div>
+          </div>
         </div>
 
-        {/* Your Money */}
+        {/* Portfolio Value */}
         {(() => {
           const totalCost = Object.values(coins).reduce((s, c) => s + (c.holdingsUsd || 0), 0);
           const totalCurrentValue = Object.entries(coins).reduce((s, [coin, cc]) => {
@@ -152,59 +167,84 @@ export default function Dashboard() {
           const totalPnl = totalCurrentValue - totalCost;
           const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
           return (
-            <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-              <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Your Money</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
+            <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-emerald-950/20 border border-zinc-800/50 rounded-2xl p-5 sm:p-6 animate-fade-up animate-gradient" style={{ animationDelay: '50ms' }}>
+              <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/[0.04] rounded-full blur-3xl pointer-events-none" />
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {activePortfolio && (
+                  <span className="text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20">
+                    {activePortfolio.name}
+                  </span>
+                )}
+                {activePortfolio?.telegramChatId && (
+                  <span className="text-[10px] text-zinc-600 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.67-.52.36-1 .53-1.42.52-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.74 3.98-1.73 6.64-2.87 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.53.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>
+                    on
+                  </span>
+                )}
+                {activePortfolio?.alertEmail && (
+                  <span className="text-[10px] text-zinc-600 flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    on
+                  </span>
+                )}
+              </div>
+              {/* Main stats - stack on mobile */}
+              <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-x-6 mb-5">
                 <div>
-                  <Tip text="What all your crypto is worth right now at current market prices.">
-                    <p className="text-xs text-zinc-500">Portfolio Value</p>
-                  </Tip>
-                  <p className="text-xl font-mono font-bold">{fmt(totalCurrentValue)}</p>
+                  <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Portfolio Value</p>
+                  <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums tracking-tight">{fmt(totalCurrentValue)}</p>
                 </div>
-                <div>
-                  <Tip text="How much USD you spent buying all your crypto (your total cost basis).">
-                    <p className="text-xs text-zinc-500">Total Cost</p>
-                  </Tip>
-                  <p className="text-lg font-mono font-bold text-zinc-400">{fmt(totalCost)}</p>
+                <div className="flex gap-6 sm:block">
+                  <div className="flex-1">
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Cost</p>
+                    <p className="text-lg sm:text-xl font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmt(totalCost)}</p>
+                  </div>
+                  <div className="flex-1 sm:hidden">
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total P&L</p>
+                    <p className={`text-lg font-mono font-bold mt-1 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
+                      <span className="text-[10px] ml-1 opacity-80">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <Tip text={`Your overall profit or loss: current value (${fmt(totalCurrentValue)}) minus total cost (${fmt(totalCost)}).`}>
-                    <p className="text-xs text-zinc-500">Total P&L</p>
-                  </Tip>
-                  <p className={`text-lg font-mono font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)} <span className="text-xs">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                <div className="hidden sm:block">
+                  <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total P&L</p>
+                  <p className={`text-xl font-mono font-bold mt-1 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
+                    <span className="text-xs ml-1 opacity-80">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
                   </p>
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4 border-t border-zinc-800/50 pt-3">
-                <div>
-                  <Tip text="The total amount of money you've set aside for this portfolio.">
-                    <p className="text-xs text-zinc-500">Total Budget</p>
-                  </Tip>
-                  <p className="text-sm font-mono font-bold">{fmt(config?.totalCapital)}</p>
-                </div>
-                <div>
-                  <Tip text="Cash available for buying dips. Auto-calculated from your transactions.">
-                    <p className="text-xs text-zinc-500">Cash Ready</p>
-                  </Tip>
-                  <p className="text-sm font-mono font-bold text-blue-400">{fmt(config?.powderRemaining)}</p>
-                </div>
-                <div>
-                  <Tip text="Emergency reserve — only deployed after a deep crash + floor confirmation.">
-                    <p className="text-xs text-zinc-500">Reserve</p>
-                  </Tip>
-                  <p className="text-sm font-mono font-bold text-amber-400">{fmt(config?.reserveRemaining)}</p>
-                </div>
+              <div className="grid grid-cols-3 gap-3 sm:gap-4 border-t border-zinc-800/40 pt-4">
+                <Tooltip text="Total capital allocated to this portfolio across all coins and cash reserves.">
+                  <div>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Budget</p>
+                    <p className="text-xs sm:text-sm font-mono font-bold mt-0.5 tabular-nums">{fmt(config?.totalCapital)}</p>
+                  </div>
+                </Tooltip>
+                <Tooltip text="Dry powder available for the next buy rung. Decreases each time you deploy into a dip.">
+                  <div>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Cash Ready</p>
+                    <p className="text-xs sm:text-sm font-mono font-bold text-blue-400 mt-0.5 tabular-nums">{fmt(config?.powderRemaining)}</p>
+                  </div>
+                </Tooltip>
+                <Tooltip text="Deep-crash reserve. Only unlocked when floor confirmation triggers after a major drawdown.">
+                  <div>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Reserve</p>
+                    <p className="text-xs sm:text-sm font-mono font-bold text-amber-400 mt-0.5 tabular-nums">{fmt(config?.reserveRemaining)}</p>
+                  </div>
+                </Tooltip>
               </div>
             </div>
           );
         })()}
 
         {/* Coin Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {Object.entries(coins).map(([coin, cc]) => {
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {Object.entries(coins).map(([coin, cc], idx) => {
             const price = prices?.[coin];
             if (!price) return null;
+            const colors = COIN_COLORS[coin] || DEFAULT_COLOR;
             const pnlPct = cc.avgCost ? ((price - cc.avgCost) / cc.avgCost) * 100 : 0;
             const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
             const currentValue = totalCoins * price;
@@ -216,101 +256,80 @@ export default function Dashboard() {
             const nearSell = cc.avgCost > 0 && price >= sellAt;
 
             return (
-              <div key={coin} className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-                {/* Header: coin name + price + P&L badge */}
-                <div className="flex justify-between items-start mb-3">
+              <div key={coin}
+                className={`bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 sm:p-5 hover:border-zinc-700/50 hover:bg-zinc-900/80 active:scale-[0.98] sm:active:scale-100 transition-all duration-200 animate-fade-up`}
+                style={{ animationDelay: `${100 + idx * 60}ms` }}
+              >
+                {/* Header */}
+                <div className="flex justify-between items-start mb-3 sm:mb-4">
                   <div>
-                    <p className="text-xs text-zinc-500 font-medium">{coin}</p>
-                    <p className="text-2xl font-mono font-bold mt-0.5">
-                      {fmtPrice(price)}
-                    </p>
+                    <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md ${colors.badge}`}>{coin}</span>
+                    <p className="text-xl sm:text-2xl font-mono font-bold mt-1.5 sm:mt-2 tabular-nums">{fmtPrice(price)}</p>
                   </div>
                   {cc.avgCost > 0 && (
-                    <Tip text={`Your profit/loss on ${coin}. You bought at avg ${fmtPrice(cc.avgCost)}, now ${fmtPrice(price)}. ${pnlPct >= 0 ? 'You are in profit.' : 'You are at a loss — normal during dips.'}`}>
-                      <span className={`text-xs font-mono font-semibold px-2 py-1 rounded-md ${
-                        pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                      }`}>
-                        {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
-                      </span>
-                    </Tip>
+                    <span className={`text-xs font-mono font-semibold px-2 sm:px-2.5 py-1 rounded-lg ${
+                      pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                    }`}>
+                      {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                    </span>
                   )}
                 </div>
 
-                {/* Portfolio details — CoinGecko style */}
-                <div className="space-y-2 text-sm">
-                  {cc.avgCost > 0 && (
+                {/* Details */}
+                <div className="space-y-1 sm:space-y-1.5 text-sm">
+                  {cc.avgCost > 0 ? (
                     <>
-                      <div className="flex justify-between">
-                        <Tip text={`You own ${fmtCoinAmt(totalCoins)} ${coin}, bought at a weighted average of ${fmtPrice(cc.avgCost)} per coin.`}>
-                          <span className="text-zinc-500">Holdings</span>
-                        </Tip>
-                        <span className="font-mono">{fmtCoinAmt(totalCoins)} {coin}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <Tip text={`What your ${coin} position is worth right now at market price (${fmtPrice(price)} x ${fmtCoinAmt(totalCoins)}).`}>
-                          <span className="text-zinc-500">Current value</span>
-                        </Tip>
-                        <span className="font-mono">{fmt(currentValue)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <Tip text={`Your total cost basis — how much USD you spent buying this ${coin}.`}>
-                          <span className="text-zinc-500">Total cost</span>
-                        </Tip>
-                        <span className="font-mono">{fmt(cc.holdingsUsd)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <Tip text={`The weighted average price of all your ${coin} buys.`}>
-                          <span className="text-zinc-500">Avg cost</span>
-                        </Tip>
-                        <span className="font-mono">{fmtPrice(cc.avgCost)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-zinc-500">Profit / Loss</span>
-                        <span className={`font-mono font-semibold ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <Row label="Holdings">
+                        <span className="font-mono tabular-nums">{fmtCoinAmt(totalCoins)} <span className="text-zinc-500 text-[10px] sm:text-xs">{coin}</span></span>
+                      </Row>
+                      <Row label="Value">
+                        <span className="font-mono tabular-nums">{fmt(currentValue)}</span>
+                      </Row>
+                      <Row label="Cost">
+                        <span className="font-mono tabular-nums text-zinc-400">{fmt(cc.holdingsUsd)}</span>
+                      </Row>
+                      <Row label="Avg Cost">
+                        <span className="font-mono tabular-nums text-zinc-400">{fmtPrice(cc.avgCost)}</span>
+                      </Row>
+                      <Row label="P&L">
+                        <span className={`font-mono font-semibold tabular-nums ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {pnlUsd >= 0 ? '+' : ''}{fmt(pnlUsd)}
                         </span>
-                      </div>
+                      </Row>
                     </>
+                  ) : (
+                    <p className="text-xs text-zinc-600 py-2">Price tracking only &mdash; no position held</p>
                   )}
 
-                  {/* Buy/Sell zones */}
+                  {/* Buy/Sell Zones */}
                   {cc.buyReference > 0 && (
-                    <div className="border-t border-zinc-800/50 pt-3 space-y-2">
-                      <Tip text={(() => {
-                        const rung = Math.max((config?.powderRemaining || 0) / 5, 0);
-                        const coinsToBuy = rung > 0 && price > 0 ? rung / price : 0;
-                        return nearBuy
-                          ? `${coin} is in the BUY ZONE! Price is ${((cc.buyReference - price) / cc.buyReference * 100).toFixed(1)}% below your last buy at ${fmtPrice(cc.buyReference)}. Buy ${fmtCoinAmt(coinsToBuy)} ${coin} for ${fmt(rung)} (1 rung = 1/5 of your ${fmt(config?.powderRemaining)} cash).`
-                          : `${coin} needs to drop to ${fmtPrice(buyAt)} (${buyDropPct}% below your last buy at ${fmtPrice(cc.buyReference)}) before you should buy more.`;
-                      })()}>
-                        <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
-                          nearBuy ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-zinc-800/30'
+                    <div className="border-t border-zinc-800/40 pt-2.5 sm:pt-3 mt-2.5 sm:mt-3 space-y-1.5 sm:space-y-2">
+                      <Tooltip block text={`Alert fires when price drops ${buyDropPct}% below your buy reference (${fmtPrice(cc.buyReference)}). After a buy, lower your buy reference to the fill price.`}>
+                        <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
+                          nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
                         }`}>
-                          <span className={`text-xs ${nearBuy ? 'text-blue-300 font-medium' : 'text-zinc-500'}`}>
-                            {nearBuy ? 'BUY ZONE' : 'Next buy at'}
+                          <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
+                            {nearBuy ? 'BUY ZONE' : 'Next buy'}
                           </span>
-                          <span className={`font-mono text-xs ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-400'}`}>
+                          <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
                             {fmtPrice(buyAt)}
                           </span>
                         </div>
-                      </Tip>
+                      </Tooltip>
 
                       {cc.avgCost > 0 && (
-                        <Tip text={nearSell
-                          ? `${coin} is in the SELL ZONE! Price is +${((price - cc.avgCost) / cc.avgCost * 100).toFixed(0)}% above your avg cost. Sell 15% to lock in profit.`
-                          : `${coin} needs to rise to ${fmtPrice(sellAt)} (+${(config?.firstSellPct * 100).toFixed(0)}% above avg cost ${fmtPrice(cc.avgCost)}) before you take profit.`
-                        }>
-                          <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
-                            nearSell ? 'bg-orange-500/10 border border-orange-500/30' : 'bg-zinc-800/30'
+                        <Tooltip block text={`First trim trigger at +${((config?.firstSellPct || 0.4) * 100).toFixed(0)}% above your avg cost (${fmtPrice(cc.avgCost)}). Subsequent sells step up by +${((config?.sellStepPct || 0.1) * 100).toFixed(0)}% each.`}>
+                          <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
+                            nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
                           }`}>
-                            <span className={`text-xs ${nearSell ? 'text-orange-300 font-medium' : 'text-zinc-500'}`}>
-                              {nearSell ? 'SELL ZONE — take 15% off' : 'First sell at'}
+                            <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearSell ? 'text-orange-300' : 'text-zinc-500'}`}>
+                              {nearSell ? 'SELL ZONE' : 'First sell'}
                             </span>
-                            <span className={`font-mono text-xs ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-400'}`}>
+                            <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-500'}`}>
                               {fmtPrice(sellAt)}
                             </span>
                           </div>
-                        </Tip>
+                        </Tooltip>
                       )}
                     </div>
                   )}
@@ -321,99 +340,131 @@ export default function Dashboard() {
         </div>
 
         {/* Safety Checks */}
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Safety Checks</h2>
-          <p className="text-sm text-zinc-500 mb-4">These run automatically for each portfolio. You get alerts on your own Telegram + email.</p>
+        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '200ms' }}>
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Safety Checks</h2>
+          <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Automated monitoring across all portfolios</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <CheckRow
-              label="Drawdown Warning"
-              desc="Price drops -20%, -35%, or -50% from high"
-              tooltip="Tracks how far each coin has fallen from its highest price. At -20%: keep buying dips. At -35% or -50%: STOP buying and wait for a floor."
-              active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
-            />
-            <CheckRow
-              label="Floor Confirmed"
-              desc="After a crash, holds above bottom for 2 weeks"
-              tooltip="After a -35% or -50% crash, if the price closes above the lowest point for 2 consecutive weeks, the crash is likely over. This unlocks your Emergency Reserve."
-              active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
-            />
-            <CheckRow
-              label="Thesis Break"
-              desc="BTC below 200-week MA for 2 weeks"
-              tooltip="The 200-week moving average is BTC's long-term support line. If BTC closes below it for 2 weeks in a row, the bull thesis may be broken. Action: STOP all buying."
-              active={status?.rules?.thesisBreak}
-            />
-            <CheckRow
-              label="Upside Breakout"
-              desc={`BTC weekly close above $${(config?.upsideBreakUsd || 90000).toLocaleString()}`}
-              tooltip={`If BTC closes a week above $${(config?.upsideBreakUsd || 90000).toLocaleString()}, the downtrend is over. Action: deploy 40% of your remaining cash at market price immediately.`}
-              active={status?.rules?.upsideBreak}
-            />
-            <CheckRow
-              label="Monthly Review"
-              desc="1st of each month position summary"
-              tooltip="On the 1st of every month, you get a summary of all your positions, profit/loss, and remaining cash."
-              active={false}
-              isInfo
-            />
+            <Tooltip block text="Triggers at -20%, -35%, and -50% drawdowns from cycle high. Each level suggests progressively deploying reserve capital.">
+              <CheckRow
+                label="Drawdown Warning"
+                desc="Price drops -20%, -35%, or -50% from high"
+                active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
+              />
+            </Tooltip>
+            <Tooltip block text="After a major drawdown, if price holds above the bottom for 2 consecutive weeks, floor is confirmed. This unlocks reserve capital for deployment.">
+              <CheckRow
+                label="Floor Confirmed"
+                desc="Holds above bottom for 2 weeks"
+                active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
+              />
+            </Tooltip>
+            <Tooltip block text="If BTC closes below its 200-week moving average for 2 consecutive weeks, the long-term bull thesis may be broken. Consider reducing risk.">
+              <CheckRow
+                label="Thesis Break"
+                desc="BTC below 200-week MA for 2 weeks"
+                active={status?.rules?.thesisBreak}
+              />
+            </Tooltip>
+            <Tooltip block text="When BTC weekly close exceeds this price, it signals a potential macro breakout. Review your sell ladder and consider taking partial profits.">
+              <CheckRow
+                label="Upside Breakout"
+                desc={`BTC close above $${(config?.upsideBreakUsd || 90000).toLocaleString()}`}
+                active={status?.rules?.upsideBreak}
+              />
+            </Tooltip>
+            <Tooltip block text="On the 1st of each month, a summary of all portfolio positions, P&L, and market conditions is sent via your alert channels.">
+              <CheckRow
+                label="Monthly Review"
+                desc="1st of each month summary"
+                active={false}
+                isInfo
+              />
+            </Tooltip>
           </div>
         </div>
 
         {/* 200-Week MA */}
         {status?.ma200 && (
-          <Tip text="The 200-week moving average is the average BTC price over the last ~4 years. If BTC is above it, the long-term trend is healthy.">
-            <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <div>
-                <p className="text-xs text-zinc-500">BTC 200-Week Moving Average</p>
-                <p className="text-xl font-mono font-bold mt-0.5">${Math.round(status.ma200).toLocaleString()}</p>
-              </div>
-              <span className={`text-xs font-medium px-3 py-1.5 rounded-lg ${
-                (prices?.BTC || 0) > status.ma200
-                  ? 'bg-emerald-500/10 text-emerald-400'
-                  : 'bg-red-500/10 text-red-400'
-              }`}>
-                BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} — {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
-              </span>
+          <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-up" style={{ animationDelay: '250ms' }}>
+            <div>
+              <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">BTC 200-Week Moving Average</p>
+              <p className="text-xl sm:text-2xl font-mono font-bold mt-1 tabular-nums">${Math.round(status.ma200).toLocaleString()}</p>
             </div>
-          </Tip>
+            <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg w-fit ${
+              (prices?.BTC || 0) > status.ma200
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+            }`}>
+              BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} \u2014 {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
+            </span>
+          </div>
         )}
 
         {/* Market News */}
         {news.length > 0 && (
-          <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Market News</h2>
-            <p className="text-xs text-zinc-500 mb-3">High-impact news from the last 24 hours.</p>
+          <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '300ms' }}>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market News</h2>
+              {news.some(a => a.direction) && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">AI</span>
+              )}
+            </div>
+            <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">{news.some(a => a.direction) ? 'AI-filtered for your portfolio' : 'High-impact headlines, last 24h'}</p>
             <div className="space-y-2">
-              {news.map((a, i) => (
-                <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
-                   className="block bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg p-3 transition-colors">
-                  <div className="flex justify-between items-start gap-2">
-                    <p className="text-sm text-zinc-200">{a.title}</p>
-                    <span className="text-[10px] text-zinc-500 shrink-0">{a.source}</span>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    {new Date(a.published).toLocaleString()}
-                  </p>
-                </a>
-              ))}
+              {news.map((a, i) => {
+                const hasAI = a.direction && a.insight;
+                const dirColor = a.direction === 'bullish' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : a.direction === 'bearish' ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                  : 'text-zinc-400 bg-zinc-700/30 border-zinc-700/40';
+                const arrow = a.direction === 'bullish' ? '\u2197' : a.direction === 'bearish' ? '\u2198' : '\u2192';
+                return (
+                  <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
+                     className="block bg-zinc-800/30 hover:bg-zinc-800/50 active:bg-zinc-800/60 rounded-xl p-3 sm:p-3.5 transition-all duration-150 group">
+                    <p className="text-[13px] sm:text-sm text-zinc-200 group-hover:text-zinc-100 transition-colors leading-snug">{a.title}</p>
+                    {hasAI && (
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${dirColor}`}>
+                          {arrow} {a.direction}
+                        </span>
+                        {a.coins?.map((c) => (
+                          <span key={c} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${COIN_COLORS[c]?.badge || 'bg-zinc-700/30 text-zinc-400 border border-zinc-700/40'}`}>{c}</span>
+                        ))}
+                      </div>
+                    )}
+                    {hasAI && a.insight && (
+                      <p className="text-[11px] text-zinc-400 mt-1.5 leading-snug">{a.insight}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] text-zinc-600 bg-zinc-800/80 px-1.5 py-0.5 rounded">{a.source}</span>
+                      <span className="text-[10px] text-zinc-700">{new Date(a.published).toLocaleString()}</span>
+                    </div>
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}
 
         {/* Recent Alerts */}
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Recent Alerts</h2>
-          <p className="text-xs text-zinc-500 mb-3">Alerts sent to your Telegram + email. Same alert won&apos;t repeat until conditions change.</p>
+        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '350ms' }}>
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Recent Alerts</h2>
+          <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Same alert won&apos;t repeat until conditions change</p>
           {!status?.alerts || status.alerts.length === 0 ? (
-            <p className="text-zinc-500 text-sm py-4 text-center">
-              No alerts yet. Silence means do nothing — that&apos;s the right move most days.
-            </p>
+            <div className="text-center py-6 sm:py-8">
+              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-zinc-800/60 flex items-center justify-center">
+                <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <p className="text-zinc-500 text-sm">No alerts yet</p>
+              <p className="text-zinc-600 text-xs mt-1">Silence = do nothing. That&apos;s usually right.</p>
+            </div>
           ) : (
             <div className="space-y-2">
               {status.alerts.map((a, i) => (
-                <div key={i} className="bg-zinc-800/30 rounded-lg p-3">
-                  <p className="text-xs text-zinc-500">{new Date(a.time).toLocaleString()}</p>
-                  <p className="text-sm text-zinc-200 mt-1 whitespace-pre-line">{a.message}</p>
+                <div key={i} className="bg-zinc-800/30 rounded-xl p-3 sm:p-3.5 border-l-2 border-amber-500/40">
+                  <p className="text-[10px] text-zinc-600 font-mono">{new Date(a.time).toLocaleString()}</p>
+                  <p className="text-[13px] sm:text-sm text-zinc-200 mt-1.5 whitespace-pre-line leading-relaxed">{a.message}</p>
                 </div>
               ))}
             </div>
@@ -421,38 +472,44 @@ export default function Dashboard() {
         </div>
 
         {/* Activity Log */}
-        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
-          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Activity Log</h2>
-          <p className="text-xs text-zinc-500 mb-3">Every hour, the bot checks prices across all portfolios.</p>
+        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '400ms' }}>
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Activity Log</h2>
+          <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Hourly price checks across all portfolios</p>
           {activity.length === 0 ? (
-            <p className="text-zinc-500 text-sm py-4 text-center">
-              No activity yet. The bot will log its first check on the next hourly cron run.
-            </p>
+            <div className="text-center py-6 sm:py-8">
+              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-zinc-800/60 flex items-center justify-center">
+                <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <p className="text-zinc-500 text-sm">No activity yet</p>
+              <p className="text-zinc-600 text-xs mt-1">First check happens on next cron run.</p>
+            </div>
           ) : (
-            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+            <div className="space-y-1.5 max-h-64 sm:max-h-80 overflow-y-auto pr-1">
               {activity.slice(0, 48).map((entry, i) => (
-                <div key={i} className="flex items-center gap-3 bg-zinc-800/20 rounded-lg px-3 py-2">
+                <div key={i} className="flex items-center gap-3 bg-zinc-800/20 hover:bg-zinc-800/30 rounded-xl px-3 py-2 sm:py-2.5 transition-colors">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${
                     entry.alertCount > 0 ? 'bg-amber-400' : 'bg-emerald-600'
                   }`} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-zinc-500">
+                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <span className="text-[10px] sm:text-[11px] text-zinc-500 font-mono">
                         {new Date(entry.time).toLocaleString()}
                       </span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded ${
                         entry.alertCount > 0
-                          ? 'bg-amber-500/15 text-amber-400'
-                          : 'bg-zinc-700/50 text-zinc-500'
+                          ? 'bg-amber-500/10 text-amber-400'
+                          : 'bg-zinc-700/40 text-zinc-500'
                       }`}>
                         {entry.summary}
                       </span>
                     </div>
                     {entry.prices && (
-                      <p className="text-[10px] text-zinc-500 mt-0.5 font-mono">
+                      <p className="text-[9px] sm:text-[10px] text-zinc-600 mt-0.5 font-mono tabular-nums truncate">
                         {Object.entries(entry.prices).map(([c, p]) =>
                           p ? `${c}: $${Number(p).toLocaleString()}` : null
-                        ).filter(Boolean).join(' / ')}
+                        ).filter(Boolean).join(' \u00b7 ')}
                       </p>
                     )}
                   </div>
@@ -464,71 +521,50 @@ export default function Dashboard() {
 
         {/* KV Warning */}
         {status && !status.kvConfigured && (
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-sm text-amber-300/80">
-            <strong>Database not connected.</strong> Your settings and alert history won&apos;t be saved between runs.
-            Add your Upstash Redis credentials in Vercel to fix this.
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300/80">
+            <strong>Database not connected.</strong> Settings won&apos;t persist.
+            Add Upstash Redis credentials in Vercel.
           </div>
         )}
 
-        <footer className="text-center text-[11px] text-zinc-700 pt-2 pb-8">
-          Alert-only. Never auto-trades. Checks prices every hour via cron-job.org.
+        <footer className="text-center text-[11px] text-zinc-700 pt-4 pb-6 sm:pb-8">
+          Alert-only. Never auto-trades. Prices checked hourly.
         </footer>
       </main>
+
+      <BottomNav active="dashboard" portfolioId={activePid} />
     </div>
   );
 }
 
 /* ---------- Helpers ---------- */
 
-function fmt(n) {
-  return n != null ? `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—';
-}
-
-function fmtPrice(n) {
-  if (n == null) return '—';
-  if (n < 0.01) return `$${Number(n).toFixed(6)}`;
-  return n < 10 ? `$${n.toFixed(2)}` : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
-}
-
-function fmtCoinAmt(n) {
-  if (n == null || n === 0) return '0';
-  if (n >= 1000) return Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  if (n >= 1) return n.toFixed(4);
-  if (n >= 0.001) return n.toFixed(6);
-  return n.toFixed(8);
-}
-
-function Tip({ text, children, block }) {
-  const Tag = block ? 'div' : 'span';
+function Row({ label, children }) {
   return (
-    <Tag className={`relative group/tip ${block ? 'block' : 'inline-block'}`}>
-      {children}
-      <span className="pointer-events-none absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 leading-relaxed shadow-xl opacity-0 group-hover/tip:opacity-100 transition-opacity duration-200">
-        {text}
-      </span>
-    </Tag>
+    <div className="flex justify-between items-center py-0.5">
+      <span className="text-zinc-500 text-[11px] sm:text-xs">{label}</span>
+      <span className="text-[13px] sm:text-sm">{children}</span>
+    </div>
   );
 }
 
-function CheckRow({ label, desc, tooltip, active, isInfo }) {
+function CheckRow({ label, desc, active, isInfo }) {
   return (
-    <Tip text={tooltip} block>
-      <div className={`flex items-center gap-3 rounded-lg px-4 py-3 h-full ${
-        active ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-zinc-800/40 border border-zinc-800/60'
-      }`}>
-        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-          active ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : isInfo ? 'bg-zinc-600' : 'bg-emerald-600'
-        }`} />
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-semibold ${active ? 'text-amber-300' : 'text-zinc-200'}`}>{label}</p>
-          <p className="text-xs text-zinc-400 mt-0.5">{desc}</p>
-        </div>
-        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded shrink-0 ${
-          active ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-700/50 text-zinc-500'
-        }`}>
-          {active ? 'TRIGGERED' : 'quiet'}
-        </span>
+    <div className={`flex items-center gap-3 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 h-full transition-all duration-150 active:scale-[0.98] sm:active:scale-100 ${
+      active ? 'bg-amber-500/[0.08] border border-amber-500/25' : 'bg-zinc-800/30 border border-zinc-800/50 hover:bg-zinc-800/40'
+    }`}>
+      <span className={`w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full shrink-0 ${
+        active ? 'bg-amber-400 animate-pulse-dot' : isInfo ? 'bg-zinc-600' : 'bg-emerald-600'
+      }`} />
+      <div className="flex-1 min-w-0">
+        <p className={`text-[13px] sm:text-sm font-semibold ${active ? 'text-amber-300' : 'text-zinc-200'}`}>{label}</p>
+        <p className="text-[10px] sm:text-[11px] text-zinc-500 mt-0.5">{desc}</p>
       </div>
-    </Tip>
+      <span className={`text-[9px] sm:text-[10px] font-semibold uppercase px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 ${
+        active ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-700/40 text-zinc-600'
+      }`}>
+        {active ? 'TRIGGERED' : 'quiet'}
+      </span>
+    </div>
   );
 }
