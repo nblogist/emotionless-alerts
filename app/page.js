@@ -316,7 +316,8 @@ export default function Dashboard() {
                         ? (cc.holdingsUsd + deploy) / ((cc.holdingsUsd / cc.avgCost) + coinsToBuy)
                         : buyAt;
                       const cashAfter = powder - deploy;
-                      return `Buy at ${fmtPrice(buyAt)} (${buyDropPct}% below ref ${fmtPrice(cc.buyReference)})\n\nDeploy: ${fmt(deploy)} → ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ~${fmtPrice(newAvg)}\nCash after: ${fmt(cashAfter)}`;
+                      const actualDrop = cc.buyReference > 0 ? ((cc.buyReference - price) / cc.buyReference * 100).toFixed(1) : '—';
+                      return `Rule: Buy Band (${buyDropPct}% drop rule)\nTrigger: ${fmtPrice(buyAt)} = ref ${fmtPrice(cc.buyReference)} − ${buyDropPct}%\nPrice now: ${fmtPrice(price)} (${actualDrop}% below ref)\n\nDeploy: ${fmt(deploy)} → ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ~${fmtPrice(newAvg)}\nCash after: ${fmt(cashAfter)}`;
                     })()}>
                         <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                           nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
@@ -334,8 +335,12 @@ export default function Dashboard() {
                         <Tooltip block text={(() => {
                           const sellPct = (config?.firstSellPct || 0.4) * 100;
                           const stepPct = (config?.sellStepPct || 0.1) * 100;
-                          const trimValue = currentValue * 0.25;
-                          return `Sell at ${fmtPrice(sellAt)} (+${sellPct.toFixed(0)}% above avg ${fmtPrice(cc.avgCost)})\n\nTrim ~25%: ${fmt(trimValue)} worth\nNext sell steps: +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%...`;
+                          const actualGain = cc.avgCost > 0 ? ((price - cc.avgCost) / cc.avgCost * 100).toFixed(1) : '—';
+                          const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
+                          const coinsToSell = totalCoins * 0.15;
+                          const sellValue = coinsToSell * price;
+                          const profit = sellValue - (coinsToSell * cc.avgCost);
+                          return `Rule: First Sell (${sellPct.toFixed(0)}% gain rule)\nTrigger: ${fmtPrice(sellAt)} = avg ${fmtPrice(cc.avgCost)} + ${sellPct.toFixed(0)}%\nPrice now: ${fmtPrice(price)} (${actualGain}% above avg)\n\nSell 15%: ${fmtCoinAmt(coinsToSell)} ${coin} → ${fmt(sellValue)}\nProfit on trim: ~${fmt(profit)}\nNext sells: +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%, +${(sellPct + stepPct * 3).toFixed(0)}%...`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
