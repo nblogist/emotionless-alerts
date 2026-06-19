@@ -101,8 +101,9 @@ export async function GET(request) {
     // Send and log
     if (alerts.length > 0) {
       const message = alerts.join('\n\n');
-      if (config.telegramChatId) {
-        await sendTelegram(config.telegramChatId, message);
+      const chatIds = (config.telegramChatId || '').split(',').map(id => id.trim()).filter(Boolean);
+      for (const cid of chatIds) {
+        await sendTelegram(cid, message);
       }
       await sendEmail(`Emotionless Alert: ${alerts.length} rule(s) fired`, message);
       for (const a of alerts) {

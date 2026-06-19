@@ -12,11 +12,11 @@ export async function POST() {
     if (!process.env.TELEGRAM_BOT_TOKEN) {
       return NextResponse.json({ ok: false, error: 'TELEGRAM_BOT_TOKEN env var not set' });
     }
-    const result = await sendTelegram(
-      config.telegramChatId,
-      'Emotionless Alerts test message. Bot is connected and working.'
-    );
-    return NextResponse.json({ ok: result });
+    const chatIds = config.telegramChatId.split(',').map(id => id.trim()).filter(Boolean);
+    for (const cid of chatIds) {
+      await sendTelegram(cid, 'Emotionless Alerts test message. Bot is connected and working.');
+    }
+    return NextResponse.json({ ok: true, sentTo: chatIds.length });
   } catch (e) {
     return NextResponse.json({ ok: false, error: e.message });
   }
