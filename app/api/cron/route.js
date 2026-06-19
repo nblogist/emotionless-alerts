@@ -123,11 +123,6 @@ export async function GET(request) {
         : 'No rules fired — all quiet',
     };
     await store.lpush('activityLog', logEntry);
-    // Keep only last 168 entries (~1 week of hourly checks)
-    const log = await store.get('activityLog');
-    if (Array.isArray(log) && log.length > 168) {
-      await store.set('activityLog', log.slice(0, 168));
-    }
 
     return NextResponse.json({ ok: true, alerts: alerts.length, prices });
   } catch (err) {
