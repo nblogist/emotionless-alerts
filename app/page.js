@@ -478,7 +478,7 @@ export default function Dashboard() {
 /* ---------- Helpers ---------- */
 
 function fmt(n) {
-  return n != null ? `$${Number(n).toLocaleString()}` : '—';
+  return n != null ? `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—';
 }
 
 function fmtPrice(n) {
