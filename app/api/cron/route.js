@@ -113,6 +113,22 @@ export async function GET(request) {
       console.log('No rules fired. Silence is correct.');
     }
 
+    // Activity log — record every cron run
+    const logEntry = {
+      time: now.toISOString(),
+      alertCount: alerts.length,
+      prices: Object.fromEntries(coins.map(c => [c, prices[c] || null])),
+      summary: alerts.length > 0
+        ? `${alerts.length} alert(s) sent`
+        : 'No rules fired — all quiet',
+    };
+    await store.lpush('activityLog', logEntry);
+    // Keep only last 168 entries (~1 week of hourly checks)
+    const log = await store.get('activityLog');
+    if (Array.isArray(log) && log.length > 168) {
+      await store.set('activityLog', log.slice(0, 168));
+    }
+
     return NextResponse.json({ ok: true, alerts: alerts.length, prices });
   } catch (err) {
     console.error('Cron error:', err);

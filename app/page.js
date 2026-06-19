@@ -7,21 +7,24 @@ export default function Dashboard() {
   const [config, setConfig] = useState(null);
   const [status, setStatus] = useState(null);
   const [news, setNews] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const [pRes, cRes, sRes, nRes] = await Promise.all([
+      const [pRes, cRes, sRes, nRes, aRes] = await Promise.all([
         fetch('/api/prices'),
         fetch('/api/config'),
         fetch('/api/status'),
         fetch('/api/news'),
+        fetch('/api/activity'),
       ]);
       setPrices(await pRes.json());
       setConfig(await cRes.json());
       setStatus(await sRes.json());
       setNews(await nRes.json());
+      setActivity(await aRes.json());
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -84,7 +87,7 @@ export default function Dashboard() {
               : 'All quiet. No action needed right now.'}
           </p>
           <p className="text-xs text-zinc-500 mt-1">
-            Bot checks prices every 6 hours and sends you a Telegram + email alert only when something needs attention.
+            Bot checks prices every hour and sends you a Telegram + email alert only when something needs attention.
           </p>
         </div>
 
@@ -307,6 +310,48 @@ export default function Dashboard() {
           )}
         </div>
 
+        {/* Activity Log */}
+        <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Activity Log</h2>
+          <p className="text-xs text-zinc-600 mb-3">Every hour, the bot checks prices and evaluates all rules. Here&apos;s what happened.</p>
+          {activity.length === 0 ? (
+            <p className="text-zinc-600 text-sm py-4 text-center">
+              No activity yet. The bot will log its first check on the next hourly cron run.
+            </p>
+          ) : (
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {activity.slice(0, 48).map((entry, i) => (
+                <div key={i} className="flex items-center gap-3 bg-zinc-800/20 rounded-lg px-3 py-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${
+                    entry.alertCount > 0 ? 'bg-amber-400' : 'bg-emerald-600'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-zinc-500">
+                        {new Date(entry.time).toLocaleString()}
+                      </span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                        entry.alertCount > 0
+                          ? 'bg-amber-500/15 text-amber-400'
+                          : 'bg-zinc-700/50 text-zinc-500'
+                      }`}>
+                        {entry.summary}
+                      </span>
+                    </div>
+                    {entry.prices && (
+                      <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">
+                        {Object.entries(entry.prices).map(([c, p]) =>
+                          p ? `${c}: $${Number(p).toLocaleString()}` : null
+                        ).filter(Boolean).join(' / ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* KV Warning */}
         {status && !status.kvConfigured && (
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 text-sm text-amber-300/80">
@@ -316,7 +361,7 @@ export default function Dashboard() {
         )}
 
         <footer className="text-center text-[11px] text-zinc-700 pt-2 pb-8">
-          Alert-only. Never auto-trades. Checks prices every 6 hours.
+          Alert-only. Never auto-trades. Checks prices every hour.
         </footer>
       </main>
     </div>
