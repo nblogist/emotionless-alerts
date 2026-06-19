@@ -87,7 +87,7 @@ export default function Dashboard() {
               : 'All quiet. No action needed right now.'}
           </p>
           <p className="text-xs text-zinc-500 mt-1">
-            Bot checks prices every hour and sends you a Telegram + email alert only when something needs attention.
+            Bot checks prices daily at 2:00 PM UTC and sends you a Telegram + email alert only when something needs attention.
           </p>
         </div>
 
@@ -316,7 +316,7 @@ export default function Dashboard() {
           <p className="text-xs text-zinc-600 mb-3">Every hour, the bot checks prices and evaluates all rules. Here&apos;s what happened.</p>
           {activity.length === 0 ? (
             <p className="text-zinc-600 text-sm py-4 text-center">
-              No activity yet. The bot will log its first check on the next hourly cron run.
+              No activity yet. The bot will log its first check on the next daily cron run (2:00 PM UTC).
             </p>
           ) : (
             <div className="space-y-1.5 max-h-80 overflow-y-auto">
@@ -361,7 +361,7 @@ export default function Dashboard() {
         )}
 
         <footer className="text-center text-[11px] text-zinc-700 pt-2 pb-8">
-          Alert-only. Never auto-trades. Checks prices every hour.
+          Alert-only. Never auto-trades. Checks prices daily at 2:00 PM UTC.
         </footer>
       </main>
     </div>
