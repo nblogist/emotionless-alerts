@@ -276,10 +276,13 @@ export default function Dashboard() {
                   {/* Buy/Sell zones */}
                   {cc.buyReference > 0 && (
                     <div className="border-t border-zinc-800/50 pt-3 space-y-2">
-                      <Tip text={nearBuy
-                        ? `${coin} is in the BUY ZONE! Price is ${((cc.buyReference - price) / cc.buyReference * 100).toFixed(1)}% below your last buy at ${fmtPrice(cc.buyReference)}. Deploy your next rung of cash now.`
-                        : `${coin} needs to drop to ${fmtPrice(buyAt)} (${buyDropPct}% below your last buy at ${fmtPrice(cc.buyReference)}) before you should buy more.`
-                      }>
+                      <Tip text={(() => {
+                        const rung = Math.max((config?.powderRemaining || 0) / 5, 0);
+                        const coinsToBuy = rung > 0 && price > 0 ? rung / price : 0;
+                        return nearBuy
+                          ? `${coin} is in the BUY ZONE! Price is ${((cc.buyReference - price) / cc.buyReference * 100).toFixed(1)}% below your last buy at ${fmtPrice(cc.buyReference)}. Buy ${fmtCoinAmt(coinsToBuy)} ${coin} for ${fmt(rung)} (1 rung = 1/5 of your ${fmt(config?.powderRemaining)} cash).`
+                          : `${coin} needs to drop to ${fmtPrice(buyAt)} (${buyDropPct}% below your last buy at ${fmtPrice(cc.buyReference)}) before you should buy more.`;
+                      })()}>
                         <div className={`flex justify-between items-center rounded-lg px-3 py-2 ${
                           nearBuy ? 'bg-blue-500/10 border border-blue-500/30' : 'bg-zinc-800/30'
                         }`}>
