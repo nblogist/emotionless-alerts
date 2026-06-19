@@ -68,7 +68,7 @@ export async function GET(request) {
       alert = await rules.checkDrawdownZone(coin, price);
       if (alert) alerts.push(alert);
 
-      alert = await rules.checkFloorConfirmed(coin, closes);
+      alert = await rules.checkFloorConfirmed(coin, closes, config);
       if (alert) alerts.push(alert);
     }
 
@@ -83,7 +83,7 @@ export async function GET(request) {
     alert = await rules.checkThesisBreak(btcCloses, ma200);
     if (alert) alerts.push(alert);
 
-    alert = await rules.checkUpsideBreak(btcCloses, config.upsideBreakUsd);
+    alert = await rules.checkUpsideBreak(btcCloses, config.upsideBreakUsd, config);
     if (alert) alerts.push(alert);
 
     alert = await rules.checkMonthly(config, prices);
