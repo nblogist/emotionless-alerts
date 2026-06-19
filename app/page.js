@@ -35,7 +35,7 @@ export default function Dashboard() {
       const [pRes, cRes, sRes, nRes, aRes, seenRes] = await Promise.all([
         fetch('/api/prices'),
         fetch(`/api/config?portfolio=${activePid}`),
-        fetch('/api/status'),
+        fetch(`/api/status?portfolio=${activePid}`),
         fetch('/api/news'),
         fetch('/api/activity'),
         fetch('/api/alerts-seen'),

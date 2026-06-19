@@ -16,8 +16,15 @@ export async function POST(request) {
       await store.set('portfolios', DEFAULT_PORTFOLIOS);
     }
 
+    // Coerce transaction amounts to numbers
+    const safeTxns = transactions.map(t => ({
+      ...t,
+      amount: Number(t.amount),
+      pricePerCoin: Number(t.pricePerCoin),
+    }));
+
     // Store transactions
-    await store.set(`transactions:${pid}`, transactions);
+    await store.set(`transactions:${pid}`, safeTxns);
 
     // Build config from transactions
     let config = (await store.get(`config:${pid}`)) || { ...DEFAULT_CONFIG };
@@ -27,7 +34,7 @@ export async function POST(request) {
     // Recalculate from transactions
     const coinNames = Object.keys(config.coins);
     for (const coin of coinNames) {
-      const coinTxns = transactions.filter((t) => t.coin === coin);
+      const coinTxns = safeTxns.filter((t) => t.coin === coin);
       if (coinTxns.length === 0) {
         config.coins[coin] = { holdingsUsd: 0, avgCost: 0, buyReference: 0 };
         continue;
@@ -52,7 +59,7 @@ export async function POST(request) {
 
     await store.set(`config:${pid}`, config);
 
-    return NextResponse.json({ ok: true, config, transactionCount: transactions.length });
+    return NextResponse.json({ ok: true, config, transactionCount: safeTxns.length });
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }

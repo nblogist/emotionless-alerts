@@ -70,9 +70,19 @@ export async function POST(request) {
     const { coin, type, amount, pricePerCoin, date, portfolio } = body;
     const pid = portfolio || 'corolla';
 
+    const numAmount = Number(amount);
+    const numPrice = Number(pricePerCoin);
+
     if (!coin || !type || !amount || !pricePerCoin) {
       return NextResponse.json(
         { error: 'Missing required fields: coin, type, amount, pricePerCoin' },
+        { status: 400 }
+      );
+    }
+
+    if (isNaN(numAmount) || isNaN(numPrice) || numAmount <= 0 || numPrice <= 0) {
+      return NextResponse.json(
+        { error: 'amount and pricePerCoin must be positive numbers' },
         { status: 400 }
       );
     }
@@ -87,8 +97,8 @@ export async function POST(request) {
     const transaction = {
       coin,
       type,
-      amount,
-      pricePerCoin,
+      amount: numAmount,
+      pricePerCoin: numPrice,
       date: date || new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
     };

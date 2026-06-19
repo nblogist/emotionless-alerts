@@ -8,11 +8,14 @@ export async function GET() {
   try {
     // Try cached AI analysis first (set by cron job)
     const cached = await store.get('aiNewsAnalysis');
-    if (cached?.analysis?.length > 0) {
-      const age = Date.now() - new Date(cached.timestamp).getTime();
-      // Use cached AI analysis if less than 2 hours old
-      if (age < 2 * 60 * 60 * 1000) {
-        return NextResponse.json(cached.analysis);
+    if (cached?.analysis?.length > 0 && cached.timestamp) {
+      const ts = new Date(cached.timestamp).getTime();
+      if (!isNaN(ts)) {
+        const age = Date.now() - ts;
+        // Use cached AI analysis if less than 2 hours old
+        if (age < 2 * 60 * 60 * 1000) {
+          return NextResponse.json(cached.analysis);
+        }
       }
     }
 
