@@ -48,6 +48,8 @@ export default function Tooltip({ text, children, block }) {
         <div
           className="pointer-events-none fixed z-[9999] w-72 sm:w-80 px-3.5 py-2.5 rounded-xl text-xs text-zinc-200 leading-relaxed shadow-2xl animate-toast whitespace-pre-line"
           style={{
+            position: 'fixed',
+            zIndex: 99999,
             top: pos.top,
             left: pos.left,
             transform: `translate(-50%, ${pos.below ? '0%' : '-100%'})`,
