@@ -220,19 +220,19 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 sm:gap-4 border-t border-zinc-800/40 pt-4">
-                <Tooltip text="Total capital allocated to this portfolio across all coins and cash reserves.">
+                <Tooltip text="Total money you put into this portfolio — coins + cash + reserve combined.">
                   <div>
                     <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Budget</p>
                     <p className="text-xs sm:text-sm font-mono font-bold mt-0.5 tabular-nums">{fmt(config?.totalCapital)}</p>
                   </div>
                 </Tooltip>
-                <Tooltip text="Dry powder available for the next buy rung. Decreases each time you deploy into a dip.">
+                <Tooltip text="Cash you can spend on the next dip. Each buy uses 1/5 of this. Goes down every time you buy.">
                   <div>
                     <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Cash Ready</p>
                     <p className="text-xs sm:text-sm font-mono font-bold text-blue-400 mt-0.5 tabular-nums">{fmt(config?.powderRemaining)}</p>
                   </div>
                 </Tooltip>
-                <Tooltip text="Deep-crash reserve. Only unlocked when floor confirmation triggers after a major drawdown.">
+                <Tooltip text="Emergency cash. Locked until a big crash happens and the price stabilizes. Then you can use it to buy cheap.">
                   <div>
                     <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Reserve</p>
                     <p className="text-xs sm:text-sm font-mono font-bold text-amber-400 mt-0.5 tabular-nums">{fmt(config?.reserveRemaining)}</p>
@@ -317,7 +317,8 @@ export default function Dashboard() {
                         : buyAt;
                       const cashAfter = powder - deploy;
                       const actualDrop = cc.buyReference > 0 ? ((cc.buyReference - price) / cc.buyReference * 100).toFixed(1) : '—';
-                      return `Rule: Buy Band (${buyDropPct}% drop rule)\nTrigger: ${fmtPrice(buyAt)} = ref ${fmtPrice(cc.buyReference)} − ${buyDropPct}%\nPrice now: ${fmtPrice(price)} (${actualDrop}% below ref)\n\nDeploy: ${fmt(deploy)} → ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ~${fmtPrice(newAvg)}\nCash after: ${fmt(cashAfter)}`;
+                      const notYet = price > buyAt;
+                      return `Buy when ${coin} drops ${buyDropPct}% below your last buy\n\nLast buy was at ${fmtPrice(cc.buyReference)}\nBuy triggers at ${fmtPrice(buyAt)}\nPrice now: ${fmtPrice(price)} (${actualDrop}% below)${notYet ? ' — not there yet' : ' — BUY NOW'}\n\nSpend ${fmt(deploy)} → get ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nCash left after: ${fmt(cashAfter)}`;
                     })()}>
                         <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                           nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
@@ -339,8 +340,8 @@ export default function Dashboard() {
                           const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
                           const coinsToSell = totalCoins * 0.15;
                           const sellValue = coinsToSell * price;
-                          const profit = sellValue - (coinsToSell * cc.avgCost);
-                          return `Rule: First Sell (${sellPct.toFixed(0)}% gain rule)\nTrigger: ${fmtPrice(sellAt)} = avg ${fmtPrice(cc.avgCost)} + ${sellPct.toFixed(0)}%\nPrice now: ${fmtPrice(price)} (${actualGain}% above avg)\n\nSell 15%: ${fmtCoinAmt(coinsToSell)} ${coin} → ${fmt(sellValue)}\nProfit on trim: ~${fmt(profit)}\nNext sells: +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%, +${(sellPct + stepPct * 3).toFixed(0)}%...`;
+                          const notYet = price < sellAt;
+                          return `Sell 15% when ${coin} gains ${sellPct.toFixed(0)}% above your avg cost\n\nAvg cost: ${fmtPrice(cc.avgCost)}\nSell triggers at ${fmtPrice(sellAt)}\nPrice now: ${fmtPrice(price)} (${actualGain}% above avg)${notYet ? ' — not there yet' : ' — SELL NOW'}\n\nSell ${fmtCoinAmt(coinsToSell)} ${coin} → get ${fmt(sellValue)}\nNext sells at +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%, +${(sellPct + stepPct * 3).toFixed(0)}%`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
@@ -367,35 +368,35 @@ export default function Dashboard() {
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Safety Checks</h2>
           <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Automated monitoring across all portfolios</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Tooltip block text="Triggers at -20%, -35%, and -50% drawdowns from cycle high. Each level suggests progressively deploying reserve capital.">
+            <Tooltip block text="Warns you when a coin drops -20%, -35%, or -50% from its highest price this cycle. The bigger the drop, the more cautious you should be.">
               <CheckRow
                 label="Drawdown Warning"
                 desc="Price drops -20%, -35%, or -50% from high"
                 active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
               />
             </Tooltip>
-            <Tooltip block text="After a major drawdown, if price holds above the bottom for 2 consecutive weeks, floor is confirmed. This unlocks reserve capital for deployment.">
+            <Tooltip block text="After a big crash, this checks if the price stopped falling. If it stays above the bottom for 2 weeks in a row, it's safe to start buying again with your reserve cash.">
               <CheckRow
                 label="Floor Confirmed"
                 desc="Holds above bottom for 2 weeks"
                 active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
               />
             </Tooltip>
-            <Tooltip block text="If BTC closes below its 200-week moving average for 2 consecutive weeks, the long-term bull thesis may be broken. Consider reducing risk.">
+            <Tooltip block text="If BTC stays below a key long-term trendline for 2 weeks straight, something is seriously wrong. Stop all buying and wait it out.">
               <CheckRow
                 label="Thesis Break"
                 desc="BTC below 200-week MA for 2 weeks"
                 active={status?.rules?.thesisBreak}
               />
             </Tooltip>
-            <Tooltip block text="When BTC weekly close exceeds this price, it signals a potential macro breakout. Review your sell ladder and consider taking partial profits.">
+            <Tooltip block text={`If BTC closes a week above $${(config?.upsideBreakUsd || 90000).toLocaleString()}, the downtrend is over. Deploy 40% of your remaining cash immediately.`}>
               <CheckRow
                 label="Upside Breakout"
                 desc={`BTC close above $${(config?.upsideBreakUsd || 90000).toLocaleString()}`}
                 active={status?.rules?.upsideBreak}
               />
             </Tooltip>
-            <Tooltip block text="On the 1st of each month, a summary of all portfolio positions, P&L, and market conditions is sent via your alert channels.">
+            <Tooltip block text="Every 1st of the month, you get a summary of all your coins, P&L, and how much cash you have left. Just a check-in.">
               <CheckRow
                 label="Monthly Review"
                 desc="1st of each month summary"
