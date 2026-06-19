@@ -10,9 +10,12 @@ export default function Tooltip({ text, children, block }) {
   const updatePos = useCallback(() => {
     if (!ref.current) return;
     const rect = ref.current.getBoundingClientRect();
+    const left = Math.max(160, Math.min(rect.left + rect.width / 2, window.innerWidth - 160));
+    const showBelow = rect.top < 200;
     setPos({
-      top: rect.top,
-      left: rect.left + rect.width / 2,
+      top: showBelow ? rect.bottom + 8 : rect.top - 8,
+      left,
+      below: showBelow,
     });
   }, []);
 
@@ -42,16 +45,19 @@ export default function Tooltip({ text, children, block }) {
     >
       {children}
       {open && pos && typeof document !== 'undefined' && createPortal(
-        <span
-          className="pointer-events-none fixed z-[9999] w-56 sm:w-72 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700/60 text-xs text-zinc-300 leading-relaxed shadow-xl animate-toast whitespace-pre-line"
+        <div
+          className="pointer-events-none fixed z-[9999] w-72 sm:w-80 px-3.5 py-2.5 rounded-xl text-xs text-zinc-200 leading-relaxed shadow-2xl animate-toast whitespace-pre-line"
           style={{
-            top: pos.top - 8,
+            top: pos.top,
             left: pos.left,
-            transform: 'translate(-50%, -100%)',
+            transform: `translate(-50%, ${pos.below ? '0%' : '-100%'})`,
+            backgroundColor: '#1e1e24',
+            border: '1px solid rgba(82, 82, 91, 0.7)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.3)',
           }}
         >
           {text}
-        </span>,
+        </div>,
         document.body
       )}
     </Tag>
