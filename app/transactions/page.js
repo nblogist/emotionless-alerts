@@ -133,6 +133,8 @@ export default function Transactions() {
                 <option value="BTC">BTC</option>
                 <option value="ETH">ETH</option>
                 <option value="SOL">SOL</option>
+                <option value="AQUARI">AQUARI</option>
+                <option value="XAUT">XAUT (Gold)</option>
               </select>
             </div>
 
