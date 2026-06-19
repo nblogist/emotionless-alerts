@@ -316,7 +316,7 @@ export default function Dashboard() {
                         ? (cc.holdingsUsd + deploy) / ((cc.holdingsUsd / cc.avgCost) + coinsToBuy)
                         : buyAt;
                       const cashAfter = powder - deploy;
-                      return `Buy at ${fmtPrice(buyAt)} (${buyDropPct}% below ref ${fmtPrice(cc.buyReference)})\n\nDeploy: ${fmtUsd(deploy)} → ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ~${fmtPrice(newAvg)}\nCash after: ${fmtUsd(cashAfter)}`;
+                      return `Buy at ${fmtPrice(buyAt)} (${buyDropPct}% below ref ${fmtPrice(cc.buyReference)})\n\nDeploy: ${fmt(deploy)} → ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ~${fmtPrice(newAvg)}\nCash after: ${fmt(cashAfter)}`;
                     })()}>
                         <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                           nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
@@ -335,7 +335,7 @@ export default function Dashboard() {
                           const sellPct = (config?.firstSellPct || 0.4) * 100;
                           const stepPct = (config?.sellStepPct || 0.1) * 100;
                           const trimValue = currentValue * 0.25;
-                          return `Sell at ${fmtPrice(sellAt)} (+${sellPct.toFixed(0)}% above avg ${fmtPrice(cc.avgCost)})\n\nTrim ~25%: ${fmtUsd(trimValue)} worth\nNext sell steps: +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%...`;
+                          return `Sell at ${fmtPrice(sellAt)} (+${sellPct.toFixed(0)}% above avg ${fmtPrice(cc.avgCost)})\n\nTrim ~25%: ${fmt(trimValue)} worth\nNext sell steps: +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%...`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
