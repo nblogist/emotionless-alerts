@@ -117,10 +117,10 @@ export default function Dashboard() {
               {activePortfolio.name}
             </span>
             {activePortfolio.telegramChatId && (
-              <span className="text-[10px] text-zinc-600">TG alerts on</span>
+              <span className="text-[10px] text-zinc-500">TG alerts on</span>
             )}
             {activePortfolio.alertEmail && (
-              <span className="text-[10px] text-zinc-600">Email alerts on</span>
+              <span className="text-[10px] text-zinc-500">Email alerts on</span>
             )}
           </div>
         )}
@@ -131,12 +131,12 @@ export default function Dashboard() {
             ? 'bg-amber-500/10 border border-amber-500/30'
             : 'bg-emerald-500/5 border border-emerald-500/20'
         }`}>
-          <p className={`text-sm font-medium ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
+          <p className={`text-sm font-semibold ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
             {hasActiveAlerts
               ? `${status.alerts.length} alert(s) fired recently. Check below.`
               : 'All quiet. No action needed right now.'}
           </p>
-          <p className="text-xs text-zinc-500 mt-1">
+          <p className="text-xs text-zinc-400 mt-1">
             Bot checks prices every hour and sends alerts to each portfolio&apos;s Telegram + email when something needs attention.
           </p>
         </div>
@@ -320,35 +320,35 @@ export default function Dashboard() {
         {/* Safety Checks */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Safety Checks</h2>
-          <p className="text-xs text-zinc-600 mb-4">These run automatically for each portfolio. You get alerts on your own Telegram + email.</p>
-          <div className="space-y-2">
+          <p className="text-sm text-zinc-500 mb-4">These run automatically for each portfolio. You get alerts on your own Telegram + email.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <CheckRow
               label="Drawdown Warning"
-              desc="Price drops -20%, -35%, or -50% from all-time high"
+              desc="Price drops -20%, -35%, or -50% from high"
               tooltip="Tracks how far each coin has fallen from its highest price. At -20%: keep buying dips. At -35% or -50%: STOP buying and wait for a floor."
               active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
             />
             <CheckRow
               label="Floor Confirmed"
-              desc="After a deep crash, price holds above the bottom for 2 weeks"
+              desc="After a crash, holds above bottom for 2 weeks"
               tooltip="After a -35% or -50% crash, if the price closes above the lowest point for 2 consecutive weeks, the crash is likely over. This unlocks your Emergency Reserve."
               active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
             />
             <CheckRow
               label="Thesis Break"
-              desc="BTC closes below its 200-week moving average for 2 weeks (stop buying)"
+              desc="BTC below 200-week MA for 2 weeks"
               tooltip="The 200-week moving average is BTC's long-term support line. If BTC closes below it for 2 weeks in a row, the bull thesis may be broken. Action: STOP all buying."
               active={status?.rules?.thesisBreak}
             />
             <CheckRow
               label="Upside Breakout"
-              desc={`BTC weekly close above $${(config?.upsideBreakUsd || 90000).toLocaleString()} (deploy 40% of cash)`}
+              desc={`BTC weekly close above $${(config?.upsideBreakUsd || 90000).toLocaleString()}`}
               tooltip={`If BTC closes a week above $${(config?.upsideBreakUsd || 90000).toLocaleString()}, the downtrend is over. Action: deploy 40% of your remaining cash at market price immediately.`}
               active={status?.rules?.upsideBreak}
             />
             <CheckRow
               label="Monthly Review"
-              desc="Reminder on the 1st of each month to review your positions"
+              desc="1st of each month position summary"
               tooltip="On the 1st of every month, you get a summary of all your positions, profit/loss, and remaining cash."
               active={false}
               isInfo
@@ -379,16 +379,16 @@ export default function Dashboard() {
         {news.length > 0 && (
           <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
             <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Market News</h2>
-            <p className="text-xs text-zinc-600 mb-3">High-impact news from the last 24 hours.</p>
+            <p className="text-xs text-zinc-500 mb-3">High-impact news from the last 24 hours.</p>
             <div className="space-y-2">
               {news.map((a, i) => (
                 <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
                    className="block bg-zinc-800/30 hover:bg-zinc-800/50 rounded-lg p-3 transition-colors">
                   <div className="flex justify-between items-start gap-2">
                     <p className="text-sm text-zinc-200">{a.title}</p>
-                    <span className="text-[10px] text-zinc-600 shrink-0">{a.source}</span>
+                    <span className="text-[10px] text-zinc-500 shrink-0">{a.source}</span>
                   </div>
-                  <p className="text-[10px] text-zinc-600 mt-1">
+                  <p className="text-[10px] text-zinc-500 mt-1">
                     {new Date(a.published).toLocaleString()}
                   </p>
                 </a>
@@ -400,9 +400,9 @@ export default function Dashboard() {
         {/* Recent Alerts */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Recent Alerts</h2>
-          <p className="text-xs text-zinc-600 mb-3">Alerts sent to your Telegram + email. Same alert won&apos;t repeat until conditions change.</p>
+          <p className="text-xs text-zinc-500 mb-3">Alerts sent to your Telegram + email. Same alert won&apos;t repeat until conditions change.</p>
           {!status?.alerts || status.alerts.length === 0 ? (
-            <p className="text-zinc-600 text-sm py-4 text-center">
+            <p className="text-zinc-500 text-sm py-4 text-center">
               No alerts yet. Silence means do nothing — that&apos;s the right move most days.
             </p>
           ) : (
@@ -420,9 +420,9 @@ export default function Dashboard() {
         {/* Activity Log */}
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Activity Log</h2>
-          <p className="text-xs text-zinc-600 mb-3">Every hour, the bot checks prices across all portfolios.</p>
+          <p className="text-xs text-zinc-500 mb-3">Every hour, the bot checks prices across all portfolios.</p>
           {activity.length === 0 ? (
-            <p className="text-zinc-600 text-sm py-4 text-center">
+            <p className="text-zinc-500 text-sm py-4 text-center">
               No activity yet. The bot will log its first check on the next hourly cron run.
             </p>
           ) : (
@@ -446,7 +446,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     {entry.prices && (
-                      <p className="text-[10px] text-zinc-600 mt-0.5 font-mono">
+                      <p className="text-[10px] text-zinc-500 mt-0.5 font-mono">
                         {Object.entries(entry.prices).map(([c, p]) =>
                           p ? `${c}: $${Number(p).toLocaleString()}` : null
                         ).filter(Boolean).join(' / ')}
@@ -495,31 +495,34 @@ function fmtCoinAmt(n) {
   return n.toFixed(8);
 }
 
-function Tip({ text, children }) {
+function Tip({ text, children, block }) {
+  const Tag = block ? 'div' : 'span';
   return (
-    <span className="relative group/tip inline-block">
+    <Tag className={`relative group/tip ${block ? 'block' : 'inline-block'}`}>
       {children}
       <span className="pointer-events-none absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-72 px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 leading-relaxed shadow-xl opacity-0 group-hover/tip:opacity-100 transition-opacity duration-200">
         {text}
       </span>
-    </span>
+    </Tag>
   );
 }
 
 function CheckRow({ label, desc, tooltip, active, isInfo }) {
   return (
-    <Tip text={tooltip}>
-      <div className={`flex items-start gap-3 rounded-lg px-4 py-3 w-full ${
-        active ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-zinc-800/20'
+    <Tip text={tooltip} block>
+      <div className={`flex items-center gap-3 rounded-lg px-4 py-3 h-full ${
+        active ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-zinc-800/40 border border-zinc-800/60'
       }`}>
-        <span className={`mt-0.5 w-2 h-2 rounded-full shrink-0 ${
+        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
           active ? 'bg-amber-400 shadow-sm shadow-amber-400/50' : isInfo ? 'bg-zinc-600' : 'bg-emerald-600'
         }`} />
-        <div>
-          <p className={`text-sm font-medium ${active ? 'text-amber-300' : 'text-zinc-300'}`}>{label}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">{desc}</p>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${active ? 'text-amber-300' : 'text-zinc-200'}`}>{label}</p>
+          <p className="text-xs text-zinc-400 mt-0.5">{desc}</p>
         </div>
-        <span className={`ml-auto text-xs shrink-0 ${active ? 'text-amber-400' : 'text-zinc-600'}`}>
+        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded shrink-0 ${
+          active ? 'bg-amber-500/20 text-amber-400' : 'bg-zinc-700/50 text-zinc-500'
+        }`}>
           {active ? 'TRIGGERED' : 'quiet'}
         </span>
       </div>

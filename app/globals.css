@@ -4,6 +4,9 @@
 
 body {
   @apply bg-zinc-950 text-zinc-100 antialiased;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 @layer utilities {

@@ -244,7 +244,7 @@ export default function Transactions() {
                 onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
                 className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-zinc-500"
               />
-              <p className="text-[10px] text-zinc-600 mt-1">How many coins, e.g. 0.02 BTC</p>
+              <p className="text-[10px] text-zinc-500 mt-1">How many coins, e.g. 0.02 BTC</p>
             </div>
 
             {/* Price */}
@@ -258,7 +258,7 @@ export default function Transactions() {
                 onChange={(e) => setForm((f) => ({ ...f, pricePerCoin: e.target.value }))}
                 className="w-full bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-zinc-500"
               />
-              <p className="text-[10px] text-zinc-600 mt-1">The price you paid/received per coin</p>
+              <p className="text-[10px] text-zinc-500 mt-1">The price you paid/received per coin</p>
             </div>
 
             {/* Total preview */}
@@ -328,7 +328,7 @@ export default function Transactions() {
         <div className="bg-zinc-900/50 border border-zinc-800/60 rounded-xl p-5">
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-4">Transaction History</h2>
           {transactions.length === 0 ? (
-            <p className="text-zinc-600 text-sm py-6 text-center">
+            <p className="text-zinc-500 text-sm py-6 text-center">
               No transactions yet. Add your buys and sells above to track your portfolio automatically.
             </p>
           ) : (
@@ -352,14 +352,14 @@ export default function Transactions() {
                       <p className="text-sm font-mono text-zinc-200">
                         {t.amount} @ ${Number(t.pricePerCoin).toLocaleString()}
                       </p>
-                      <p className="text-[10px] text-zinc-600">{t.date}</p>
+                      <p className="text-[10px] text-zinc-500">{t.date}</p>
                     </div>
                     <p className="text-sm font-mono font-semibold text-zinc-300 shrink-0">
                       ${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                     </p>
                     <button
                       onClick={() => handleDelete(realIndex)}
-                      className="text-zinc-600 hover:text-red-400 transition-colors ml-1 text-xs"
+                      className="text-zinc-500 hover:text-red-400 transition-colors ml-1 text-xs"
                       title="Delete transaction"
                     >
                       &times;

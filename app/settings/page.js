@@ -176,7 +176,7 @@ export default function Settings() {
                   className="w-full mt-1 bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:border-zinc-500"
                   placeholder="687179551"
                 />
-                <p className="text-[10px] text-zinc-600 mt-1">Alerts for this portfolio go to this Telegram. Comma-separate for multiple.</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Alerts for this portfolio go to this Telegram. Comma-separate for multiple.</p>
               </div>
               <div>
                 <label className="text-sm text-zinc-300">Alert Email</label>
@@ -187,7 +187,7 @@ export default function Settings() {
                   className="w-full mt-1 bg-zinc-800/80 border border-zinc-700/50 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-zinc-500"
                   placeholder="you@example.com"
                 />
-                <p className="text-[10px] text-zinc-600 mt-1">Email alerts for this portfolio go here.</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Email alerts for this portfolio go here.</p>
               </div>
               <button
                 onClick={handleSavePortfolio}
@@ -365,7 +365,7 @@ function Field({ label, value, onChange, type = 'number', prefix, suffix, hint }
           {suffix && <span className="text-sm text-zinc-500">{suffix}</span>}
         </div>
       </div>
-      {hint && <p className="text-[11px] text-zinc-600 mt-1 text-right">{hint}</p>}
+      {hint && <p className="text-[11px] text-zinc-500 mt-1 text-right">{hint}</p>}
     </div>
   );
 }
