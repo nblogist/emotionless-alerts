@@ -53,7 +53,7 @@ function recalculateConfig(config, transactions) {
 
 export async function GET(request) {
   try {
-    const pid = request.nextUrl.searchParams.get('portfolio') || 'furqan';
+    const pid = request.nextUrl.searchParams.get('portfolio') || 'corolla';
     const transactions = (await store.get(`transactions:${pid}`)) || (await store.get('transactions')) || [];
     return NextResponse.json(transactions);
   } catch (error) {
@@ -68,7 +68,7 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const { coin, type, amount, pricePerCoin, date, portfolio } = body;
-    const pid = portfolio || 'furqan';
+    const pid = portfolio || 'corolla';
 
     if (!coin || !type || !amount || !pricePerCoin) {
       return NextResponse.json(
@@ -119,7 +119,7 @@ export async function DELETE(request) {
   try {
     const body = await request.json();
     const { index, portfolio } = body;
-    const pid = portfolio || 'furqan';
+    const pid = portfolio || 'corolla';
 
     if (index === undefined || index === null) {
       return NextResponse.json(
