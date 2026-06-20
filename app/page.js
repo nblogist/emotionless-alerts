@@ -413,6 +413,17 @@ export default function Dashboard() {
             const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
             const currentValue = totalCoins * price;
             const pnlUsd = currentValue - cc.holdingsUsd;
+
+            // Period-specific P&L for this card
+            let cardPnlPct = pnlPct;
+            let cardPnlUsd = pnlUsd;
+            if (pnlPeriod !== 'all' && histPrices?.[pnlPeriod]?.[coin]) {
+              const pastPrice = histPrices[pnlPeriod][coin];
+              const pastValue = totalCoins * pastPrice;
+              cardPnlUsd = currentValue - pastValue;
+              cardPnlPct = pastPrice > 0 ? ((price - pastPrice) / pastPrice) * 100 : 0;
+            }
+
             const weight = asset.weight || (1 / assetList.filter(a => a.class === 'liquid').length);
             const targetVal = weight * capital;
             const deviation = targetVal > 0 ? (currentValue - targetVal) / targetVal : 0;
@@ -438,11 +449,11 @@ export default function Dashboard() {
                     </div>
                   </div>
                   {cc.avgCost > 0 && (
-                    <Tooltip text={`Unrealized profit/loss since your avg cost of ${fmtPrice(cc.avgCost)}.`}>
+                    <Tooltip text={pnlPeriod === 'all' ? `Unrealized profit/loss since your avg cost of ${fmtPrice(cc.avgCost)}.` : `${pnlPeriod.toUpperCase()} price change for ${coin}.`}>
                       <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-lg ${
-                        pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                        cardPnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                       }`}>
-                        P&L {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                        {pnlPeriod === 'all' ? 'P&L' : pnlPeriod.toUpperCase()} {cardPnlPct >= 0 ? '+' : ''}{cardPnlPct.toFixed(1)}%
                       </span>
                     </Tooltip>
                   )}
@@ -461,9 +472,9 @@ export default function Dashboard() {
                       <Row label="Cost">
                         <span className="font-mono tabular-nums text-zinc-400">{fmt(cc.holdingsUsd)}</span>
                       </Row>
-                      <Row label="Profit / Loss">
-                        <span className={`font-mono font-semibold tabular-nums ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {pnlUsd >= 0 ? '+' : ''}{fmt(pnlUsd)}
+                      <Row label={pnlPeriod === 'all' ? 'Profit / Loss' : `${pnlPeriod.toUpperCase()} P&L`}>
+                        <span className={`font-mono font-semibold tabular-nums ${cardPnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {cardPnlUsd >= 0 ? '+' : ''}{fmt(cardPnlUsd)}
                         </span>
                       </Row>
                     </>
