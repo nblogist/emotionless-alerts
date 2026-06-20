@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { COIN_COLORS, DEFAULT_COLOR } from '@/lib/coins';
+import { COIN_COLORS, DEFAULT_COLOR, COIN_ICONS } from '@/lib/coins';
 import { fmtUsd as fmt, fmtPrice, fmtCoinAmt } from '@/lib/format';
 import BottomNav from '@/components/BottomNav';
 import Tooltip from '@/components/Tooltip';
@@ -71,15 +71,22 @@ export default function Dashboard() {
 
   if (loading || !activePid) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
-        <div className="w-10 h-10 border-2 border-zinc-800 border-t-emerald-500 rounded-full animate-spin" />
-        <p className="text-xs text-zinc-600">Loading portfolio...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <div className="relative">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center animate-float">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+          <div className="absolute inset-0 w-12 h-12 rounded-2xl bg-emerald-500/20 animate-ping" />
+        </div>
+        <p className="text-[11px] text-zinc-600 font-medium tracking-wider uppercase">Loading portfolio</p>
       </div>
     );
   }
 
   const assets = config?.assets || [];
-  const coins = config?.coins || {}; // legacy fallback for rendering
+  const coins = config?.coins || {};
   const assetList = assets.length > 0 ? assets : Object.entries(coins).map(([sym, cc]) => ({ symbol: sym, ...cc, class: sym === 'AQUARI' ? 'microcap' : 'liquid', weight: 0.25 }));
   const hasActiveAlerts = status?.alerts?.length > 0;
   const activePortfolio = portfolios.find(p => p.id === activePid);
@@ -93,22 +100,22 @@ export default function Dashboard() {
   const spendableCash = Math.max(0, cash - portfolioValue * 0.10);
 
   return (
-    <div className="min-h-screen pb-20 sm:pb-0">
+    <div className="min-h-screen pb-24 sm:pb-0">
       {/* Header */}
-      <header className="border-b border-zinc-800/40 sticky top-0 z-20 bg-zinc-950/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-20 glass-strong border-b border-zinc-800/30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center shadow-lg shadow-emerald-500/20 animate-glow">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20 animate-glow">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M22 12h-4l-3 9L9 3l-3 9H2"/>
               </svg>
             </div>
-            <h1 className="text-base font-bold tracking-tight hidden sm:block">Emotionless Alerts</h1>
+            <h1 className="text-sm font-bold tracking-tight hidden sm:block">Emotionless Alerts</h1>
             {portfolios.length > 1 && (
               <select
                 value={activePid}
                 onChange={(e) => switchPortfolio(e.target.value)}
-                className="bg-zinc-800/80 border border-zinc-700/40 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/50 cursor-pointer transition-colors"
+                className="bg-zinc-800/50 border border-zinc-700/30 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/40 cursor-pointer transition-colors"
               >
                 {portfolios.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -116,10 +123,9 @@ export default function Dashboard() {
               </select>
             )}
           </div>
-          {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-1.5">
             <button onClick={() => fetchData(true)} disabled={refreshing}
-              className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/30 transition-all cursor-pointer disabled:opacity-50">
+              className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/30 hover:bg-zinc-800/60 rounded-lg border border-zinc-700/20 transition-all cursor-pointer disabled:opacity-50">
               {refreshing ? (
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 border border-zinc-500 border-t-zinc-200 rounded-full animate-spin" />
@@ -127,14 +133,13 @@ export default function Dashboard() {
                 </span>
               ) : 'Refresh'}
             </button>
-            <Link href={`/transactions?portfolio=${activePid}`} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/30 transition-all">
-              Transactions
+            <Link href={`/transactions?portfolio=${activePid}`} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/30 hover:bg-zinc-800/60 rounded-lg border border-zinc-700/20 transition-all">
+              Portfolio
             </Link>
-            <Link href={`/settings?portfolio=${activePid}`} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/50 hover:bg-zinc-800 rounded-lg border border-zinc-700/30 transition-all">
+            <Link href={`/settings?portfolio=${activePid}`} className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 bg-zinc-800/30 hover:bg-zinc-800/60 rounded-lg border border-zinc-700/20 transition-all">
               Settings
             </Link>
           </nav>
-          {/* Mobile refresh only */}
           <button onClick={() => fetchData(true)} disabled={refreshing} aria-label="Refresh prices"
             className="sm:hidden p-2 text-zinc-400 active:text-zinc-200 rounded-lg transition-colors cursor-pointer disabled:opacity-50">
             <svg className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -144,21 +149,21 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-4 sm:space-y-5">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6 space-y-4 sm:space-y-5">
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 text-sm text-red-300 animate-fade-up">{error}</div>
+          <div className="bg-red-500/8 border border-red-500/20 rounded-2xl p-4 text-sm text-red-300 animate-fade-up">{error}</div>
         )}
 
         {/* Status Banner */}
         <div className={`rounded-2xl p-4 sm:p-5 animate-fade-up ${
           hasActiveAlerts
-            ? 'bg-amber-500/[0.07] border border-amber-500/25'
-            : 'bg-emerald-500/[0.04] border border-emerald-500/15'
+            ? 'bg-amber-500/[0.06] border border-amber-500/20'
+            : 'bg-emerald-500/[0.04] border border-emerald-500/10'
         }`}>
           <div className="flex items-center gap-3">
-            <div className={`w-2.5 h-2.5 rounded-full shrink-0 animate-pulse-dot ${hasActiveAlerts ? 'bg-amber-400' : 'bg-emerald-500'}`} />
+            <div className={`w-2 h-2 rounded-full shrink-0 animate-pulse-dot ${hasActiveAlerts ? 'bg-amber-400' : 'bg-emerald-400'}`} />
             <div>
-              <p className={`text-sm font-semibold ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
+              <p className={`text-sm font-semibold tracking-tight ${hasActiveAlerts ? 'text-amber-300' : 'text-emerald-400'}`}>
                 {hasActiveAlerts
                   ? `${status.alerts.length} alert${status.alerts.length > 1 ? 's' : ''} fired recently`
                   : 'All quiet \u2014 no action needed'}
@@ -170,7 +175,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Portfolio Value */}
+        {/* Portfolio Value — Hero Card */}
         {(() => {
           const totalCost = assetList.reduce((s, a) => s + (a.holdingsUsd || 0), 0);
           const totalCurrentValue = assetList.reduce((s, a) => {
@@ -181,73 +186,79 @@ export default function Dashboard() {
           const totalPnl = totalCurrentValue - totalCost;
           const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
           return (
-            <div className="relative overflow-hidden bg-gradient-to-br from-zinc-900 via-zinc-900/90 to-emerald-950/20 border border-zinc-800/50 rounded-2xl p-5 sm:p-6 animate-fade-up animate-gradient" style={{ animationDelay: '50ms' }}>
-              <div className="absolute -top-32 -right-32 w-64 h-64 bg-emerald-500/[0.04] rounded-full blur-3xl pointer-events-none" />
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                {activePortfolio && (
-                  <span className="text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-md border border-emerald-500/20">
-                    {activePortfolio.name}
-                  </span>
-                )}
-                {activePortfolio?.telegramChatId && (
-                  <span className="text-[10px] text-zinc-600 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.67-.52.36-1 .53-1.42.52-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.74 3.98-1.73 6.64-2.87 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.53.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>
-                    on
-                  </span>
-                )}
-                {activePortfolio?.alertEmail && (
-                  <span className="text-[10px] text-zinc-600 flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    on
-                  </span>
-                )}
-              </div>
-              {/* Main stats - stack on mobile */}
-              <div className="space-y-4 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-x-6 mb-5">
-                <div>
-                  <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Portfolio Value</p>
-                  <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums tracking-tight">{fmt(totalCurrentValue)}</p>
+            <div className="relative overflow-hidden glass rounded-3xl p-6 sm:p-7 animate-fade-up" style={{ animationDelay: '50ms' }}>
+              {/* Decorative blurs */}
+              <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/[0.06] rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-indigo-500/[0.04] rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative">
+                <div className="flex flex-wrap items-center gap-2 mb-5">
+                  {activePortfolio && (
+                    <span className="text-[10px] font-bold uppercase bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-lg border border-emerald-500/15 tracking-wider">
+                      {activePortfolio.name}
+                    </span>
+                  )}
+                  {activePortfolio?.telegramChatId && (
+                    <span className="text-[10px] text-zinc-600 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.67-.52.36-1 .53-1.42.52-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.74 3.98-1.73 6.64-2.87 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.53.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>
+                      on
+                    </span>
+                  )}
+                  {activePortfolio?.alertEmail && (
+                    <span className="text-[10px] text-zinc-600 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                      on
+                    </span>
+                  )}
                 </div>
-                <div className="flex gap-6 sm:block">
-                  <div className="flex-1">
-                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Cost</p>
-                    <p className="text-lg sm:text-xl font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmt(totalCost)}</p>
+
+                <div className="space-y-5 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-x-8 mb-6">
+                  <div>
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Portfolio Value</p>
+                    <p className="text-3xl sm:text-4xl font-mono font-bold mt-1.5 tabular-nums tracking-tighter">{fmt(totalCurrentValue)}</p>
                   </div>
-                  <div className="flex-1 sm:hidden">
+                  <div className="flex gap-6 sm:block">
+                    <div className="flex-1">
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Cost</p>
+                      <p className="text-lg sm:text-xl font-mono font-bold text-zinc-400 mt-1.5 tabular-nums">{fmt(totalCost)}</p>
+                    </div>
+                    <div className="flex-1 sm:hidden">
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">P&L</p>
+                      <p className={`text-lg font-mono font-bold mt-1.5 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
+                        <span className="text-[10px] ml-1 opacity-70">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="hidden sm:block">
                     <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total P&L</p>
-                    <p className={`text-lg font-mono font-bold mt-1 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <p className={`text-xl font-mono font-bold mt-1.5 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
-                      <span className="text-[10px] ml-1 opacity-80">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                      <span className="text-xs ml-1 opacity-70">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
                     </p>
                   </div>
                 </div>
-                <div className="hidden sm:block">
-                  <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total P&L</p>
-                  <p className={`text-xl font-mono font-bold mt-1 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
-                    <span className="text-xs ml-1 opacity-80">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
-                  </p>
+
+                <div className="grid grid-cols-3 gap-3 sm:gap-4 border-t border-zinc-700/20 pt-4">
+                  <Tooltip text="Total capital allocated to this portfolio. All target weights are percentages of this number.">
+                    <div>
+                      <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Capital</p>
+                      <p className="text-xs sm:text-sm font-mono font-bold mt-0.5 tabular-nums">{fmt(capital)}</p>
+                    </div>
+                  </Tooltip>
+                  <Tooltip text="Total cash in this portfolio. 10% is always kept as a dry-powder floor.">
+                    <div>
+                      <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Cash</p>
+                      <p className="text-xs sm:text-sm font-mono font-bold text-blue-400 mt-0.5 tabular-nums">{fmt(cash)}</p>
+                    </div>
+                  </Tooltip>
+                  <Tooltip text="Cash above the 10% floor that can be spent on dip-buys. Floor keeps ammo for the next dip.">
+                    <div>
+                      <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Spendable</p>
+                      <p className="text-xs sm:text-sm font-mono font-bold text-emerald-400 mt-0.5 tabular-nums">{fmt(spendableCash)}</p>
+                    </div>
+                  </Tooltip>
                 </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3 sm:gap-4 border-t border-zinc-800/40 pt-4">
-                <Tooltip text="Total capital allocated to this portfolio. All target weights are percentages of this number.">
-                  <div>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Capital</p>
-                    <p className="text-xs sm:text-sm font-mono font-bold mt-0.5 tabular-nums">{fmt(capital)}</p>
-                  </div>
-                </Tooltip>
-                <Tooltip text="Total cash in this portfolio. 10% is always kept as a dry-powder floor.">
-                  <div>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Cash</p>
-                    <p className="text-xs sm:text-sm font-mono font-bold text-blue-400 mt-0.5 tabular-nums">{fmt(cash)}</p>
-                  </div>
-                </Tooltip>
-                <Tooltip text="Cash above the 10% floor that can be spent on dip-buys. Floor keeps ammo for the next dip.">
-                  <div>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Spendable</p>
-                    <p className="text-xs sm:text-sm font-mono font-bold text-emerald-400 mt-0.5 tabular-nums">{fmt(spendableCash)}</p>
-                  </div>
-                </Tooltip>
               </div>
             </div>
           );
@@ -265,7 +276,6 @@ export default function Dashboard() {
             const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
             const currentValue = totalCoins * price;
             const pnlUsd = currentValue - cc.holdingsUsd;
-            // Target-based zones
             const weight = asset.weight || (1 / assetList.filter(a => a.class === 'liquid').length);
             const targetVal = weight * capital;
             const deviation = targetVal > 0 ? (currentValue - targetVal) / targetVal : 0;
@@ -276,17 +286,22 @@ export default function Dashboard() {
 
             return (
               <Link key={coin} href={`/coin/${coin.toLowerCase()}?portfolio=${activePid}`}
-                className={`block bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 sm:p-5 hover:border-zinc-700/50 hover:bg-zinc-900/80 hover:z-10 relative active:scale-[0.98] sm:active:scale-100 transition-all duration-200 animate-fade-up`}
+                className={`group block glass rounded-2xl p-4 sm:p-5 hover:bg-zinc-800/40 hover:shadow-lg hover:${colors.glow} hover:ring-1 ${colors.ring} relative transition-all duration-300 animate-fade-up`}
                 style={{ animationDelay: `${100 + idx * 60}ms` }}
               >
-                {/* Header */}
+                {/* Header with coin avatar */}
                 <div className="flex justify-between items-start mb-3 sm:mb-4">
-                  <div>
-                    <span className={`text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-md ${colors.badge}`}>{coin}</span>
-                    <p className="text-xl sm:text-2xl font-mono font-bold mt-1.5 sm:mt-2 tabular-nums">{fmtPrice(price)}</p>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg ${colors.glow} group-hover:scale-105 transition-transform duration-300`}>
+                      <span className="text-white text-xs font-bold">{COIN_ICONS[coin] || '?'}</span>
+                    </div>
+                    <div>
+                      <span className={`text-xs font-bold ${colors.label}`}>{coin}</span>
+                      <p className="text-lg font-mono font-bold tabular-nums tracking-tight mt-0.5">{fmtPrice(price)}</p>
+                    </div>
                   </div>
                   {cc.avgCost > 0 && (
-                    <span className={`text-xs font-mono font-semibold px-2 sm:px-2.5 py-1 rounded-lg ${
+                    <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-lg ${
                       pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
                     }`}>
                       {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
@@ -299,16 +314,13 @@ export default function Dashboard() {
                   {cc.avgCost > 0 ? (
                     <>
                       <Row label="Holdings">
-                        <span className="font-mono tabular-nums">{fmtCoinAmt(totalCoins)} <span className="text-zinc-500 text-[10px] sm:text-xs">{coin}</span></span>
+                        <span className="font-mono tabular-nums">{fmtCoinAmt(totalCoins)} <span className="text-zinc-500 text-[10px]">{coin}</span></span>
                       </Row>
                       <Row label="Value">
                         <span className="font-mono tabular-nums">{fmt(currentValue)}</span>
                       </Row>
                       <Row label="Cost">
                         <span className="font-mono tabular-nums text-zinc-400">{fmt(cc.holdingsUsd)}</span>
-                      </Row>
-                      <Row label="Avg Cost">
-                        <span className="font-mono tabular-nums text-zinc-400">{fmtPrice(cc.avgCost)}</span>
                       </Row>
                       <Row label="P&L">
                         <span className={`font-mono font-semibold tabular-nums ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -317,12 +329,12 @@ export default function Dashboard() {
                       </Row>
                     </>
                   ) : (
-                    <p className="text-xs text-zinc-600 py-2">Price tracking only &mdash; no position held</p>
+                    <p className="text-xs text-zinc-600 py-2">Price tracking only &mdash; no position</p>
                   )}
 
                   {/* Buy/Sell Zones */}
                   {(weight > 0 || cc.avgCost > 0) && (
-                    <div className="border-t border-zinc-800/40 pt-2.5 sm:pt-3 mt-2.5 sm:mt-3 space-y-1.5 sm:space-y-2">
+                    <div className="border-t border-zinc-700/20 pt-2.5 mt-2.5 space-y-1.5">
                       {weight > 0 && targetVal > 0 && (
                         <Tooltip block text={(() => {
                           const gap = Math.max(targetVal - currentValue, 0);
@@ -332,15 +344,15 @@ export default function Dashboard() {
                           const newCoins = totalCoins + coinsToBuy;
                           const newHoldings = cc.holdingsUsd + buyAmount;
                           const newAvg = newCoins > 0 ? newHoldings / newCoins : price;
-                          return `Buy when ${coin} drifts ≥10% below its target weight\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of ${fmt(capital)})\nCurrent value: ${fmt(currentValue)}\nDeviation: ${deviationPct}%${deviation <= -0.10 ? ' — BUY ZONE' : ' — within range'}\n\nIf buying now:\nSpend ${fmt(buyAmount)} to close the gap\nGet ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nSpendable cash left: ${fmt(Math.max(spendableCash - buyAmount, 0))}`;
+                          return `Buy when ${coin} drifts >=10% below its target weight\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of ${fmt(capital)})\nCurrent value: ${fmt(currentValue)}\nDeviation: ${deviationPct}%${deviation <= -0.10 ? ' \u2014 BUY ZONE' : ' \u2014 within range'}\n\nIf buying now:\nSpend ${fmt(buyAmount)} to close the gap\nGet ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nSpendable cash left: ${fmt(Math.max(spendableCash - buyAmount, 0))}`;
                         })()}>
-                          <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
-                            nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
+                          <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
+                            nearBuy ? 'bg-blue-500/8 border border-blue-500/20' : 'bg-zinc-800/20 border border-transparent'
                           }`}>
-                            <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
+                            <span className={`text-[11px] font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
                               {nearBuy ? 'BUY ZONE' : 'Target'}
                             </span>
-                            <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
+                            <span className={`font-mono text-[11px] tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
                               {fmt(targetVal)} ({(deviation * 100).toFixed(1)}%)
                             </span>
                           </div>
@@ -353,15 +365,15 @@ export default function Dashboard() {
                           const skimValue = currentValue * 0.05;
                           const skimCoins = price > 0 ? skimValue / price : 0;
                           const gainPct = (skimGain * 100).toFixed(1);
-                          return `Skim 5% when ${coin} rises ≥20% from last action AND above avg cost\n\nLast action: ${fmtPrice(lastAction)}\nSkim triggers at: ${fmtPrice(skimTriggerPrice)}\nAvg cost: ${fmtPrice(cc.avgCost)}\nPrice now: ${fmtPrice(price)} (${gainPct}% from last action)${nearSell ? ' — SKIM NOW' : ' — not there yet'}\n\nIf skimming now:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5% of position)\nProceeds: ~${fmt(skimValue)}\nRemaining 95% keeps riding`;
+                          return `Skim 5% when ${coin} rises >=20% from last action AND above avg cost\n\nLast action: ${fmtPrice(lastAction)}\nSkim triggers at: ${fmtPrice(skimTriggerPrice)}\nAvg cost: ${fmtPrice(cc.avgCost)}\nPrice now: ${fmtPrice(price)} (${gainPct}% from last action)${nearSell ? ' \u2014 SKIM NOW' : ' \u2014 not there yet'}\n\nIf skimming now:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5% of position)\nProceeds: ~${fmt(skimValue)}\nRemaining 95% keeps riding`;
                         })()}>
-                          <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
-                            nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
+                          <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
+                            nearSell ? 'bg-orange-500/8 border border-orange-500/20' : 'bg-zinc-800/20 border border-transparent'
                           }`}>
-                            <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearSell ? 'text-orange-300' : 'text-zinc-500'}`}>
+                            <span className={`text-[11px] font-medium whitespace-nowrap ${nearSell ? 'text-orange-300' : 'text-zinc-500'}`}>
                               {nearSell ? 'SKIM ZONE' : 'Skim at'}
                             </span>
-                            <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-500'}`}>
+                            <span className={`font-mono text-[11px] tabular-nums ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-500'}`}>
                               {fmtPrice(lastAction * 1.20)}
                             </span>
                           </div>
@@ -376,21 +388,15 @@ export default function Dashboard() {
         </div>
 
         {/* Safety Checks */}
-        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '200ms' }}>
+        <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '200ms' }}>
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Safety Checks</h2>
-          <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Automated monitoring across all portfolios</p>
+          <p className="text-[11px] text-zinc-600 mt-0.5 mb-3 sm:mb-4">Automated monitoring across all portfolios</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Tooltip block text="10% of portfolio value is always kept as cash. When cash drops below this floor, buy signals are capped or suppressed to preserve dry powder for the next dip.">
-              <CheckRow
-                label="Cash Floor"
-                desc="10% of portfolio kept as dry powder"
-                active={cash < portfolioValue * 0.10}
-              />
+              <CheckRow label="Cash Floor" desc="10% of portfolio kept as dry powder" active={cash < portfolioValue * 0.10} />
             </Tooltip>
-            <Tooltip block text="When an asset drifts ≥10% below its target weight, a buy signal fires. The gap is filled using spendable cash (cash above the 10% floor).">
-              <CheckRow
-                label="Active Buy Signals"
-                desc="Assets ≥10% below target weight"
+            <Tooltip block text="When an asset drifts >=10% below its target weight, a buy signal fires. The gap is filled using spendable cash (cash above the 10% floor).">
+              <CheckRow label="Active Buy Signals" desc="Assets >=10% below target weight"
                 active={assetList.some(a => {
                   const p = prices?.[a.symbol];
                   if (!p || !a.avgCost || a.avgCost === 0) return false;
@@ -400,35 +406,26 @@ export default function Dashboard() {
                 })}
               />
             </Tooltip>
-            <Tooltip block text="If BTC closes below the 200-week moving average for 2 consecutive weeks, half of each crypto target shifts to gold + cash. Re-risks when BTC recovers above the MA. Optional — off by default.">
-              <CheckRow
-                label="Crash Brake"
-                desc="BTC below 200-week MA for 2 weeks"
-                active={status?.rules?.crashBrakeActive}
-              />
+            <Tooltip block text="If BTC closes below the 200-week moving average for 2 consecutive weeks, half of each crypto target shifts to gold + cash. Re-risks when BTC recovers above the MA. Optional \u2014 off by default.">
+              <CheckRow label="Crash Brake" desc="BTC below 200-week MA for 2 weeks" active={status?.rules?.crashBrakeActive} />
             </Tooltip>
             <Tooltip block text="Every 1st of the month, you get a summary of all your assets, P&L, and portfolio balance. Just a monthly check-in.">
-              <CheckRow
-                label="Monthly Review"
-                desc="1st of each month summary"
-                active={false}
-                isInfo
-              />
+              <CheckRow label="Monthly Review" desc="1st of each month summary" active={false} isInfo />
             </Tooltip>
           </div>
         </div>
 
         {/* 200-Week MA */}
         {status?.ma200 && (
-          <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-up" style={{ animationDelay: '250ms' }}>
+          <div className="glass rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-up" style={{ animationDelay: '250ms' }}>
             <div>
               <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">BTC 200-Week Moving Average</p>
-              <p className="text-xl sm:text-2xl font-mono font-bold mt-1 tabular-nums">${Math.round(status.ma200).toLocaleString()}</p>
+              <p className="text-xl sm:text-2xl font-mono font-bold mt-1 tabular-nums tracking-tight">${Math.round(status.ma200).toLocaleString()}</p>
             </div>
             <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg w-fit ${
               (prices?.BTC || 0) > status.ma200
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                : 'bg-red-500/10 text-red-400 border border-red-500/15'
             }`}>
               BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} \u2014 {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
             </span>
@@ -437,32 +434,30 @@ export default function Dashboard() {
 
         {/* Market News */}
         {news.length > 0 && (
-          <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '300ms' }}>
+          <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '300ms' }}>
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market News</h2>
               {news.some(a => a.direction) && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20">AI</span>
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/15">AI</span>
               )}
             </div>
-            <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">{news.some(a => a.direction) ? 'AI-filtered for your portfolio' : 'High-impact headlines, last 24h'}</p>
+            <p className="text-[11px] text-zinc-600 mt-0.5 mb-3 sm:mb-4">{news.some(a => a.direction) ? 'AI-filtered for your portfolio' : 'High-impact headlines, last 24h'}</p>
             <div className="space-y-2">
               {news.map((a, i) => {
                 const hasAI = a.direction && a.insight;
-                const dirColor = a.direction === 'bullish' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
-                  : a.direction === 'bearish' ? 'text-red-400 bg-red-500/10 border-red-500/20'
-                  : 'text-zinc-400 bg-zinc-700/30 border-zinc-700/40';
+                const dirColor = a.direction === 'bullish' ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15'
+                  : a.direction === 'bearish' ? 'text-red-400 bg-red-500/10 border-red-500/15'
+                  : 'text-zinc-400 bg-zinc-700/20 border-zinc-700/30';
                 const arrow = a.direction === 'bullish' ? '\u2197' : a.direction === 'bearish' ? '\u2198' : '\u2192';
                 return (
                   <a key={i} href={a.url} target="_blank" rel="noopener noreferrer"
-                     className="block bg-zinc-800/30 hover:bg-zinc-800/50 active:bg-zinc-800/60 rounded-xl p-3 sm:p-3.5 transition-all duration-150 group">
+                     className="block bg-zinc-800/20 hover:bg-zinc-800/40 rounded-xl p-3.5 transition-all duration-200 group">
                     <p className="text-[13px] sm:text-sm text-zinc-200 group-hover:text-zinc-100 transition-colors leading-snug">{a.title}</p>
                     {hasAI && (
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${dirColor}`}>
-                          {arrow} {a.direction}
-                        </span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${dirColor}`}>{arrow} {a.direction}</span>
                         {a.coins?.map((c) => (
-                          <span key={c} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${COIN_COLORS[c]?.badge || 'bg-zinc-700/30 text-zinc-400 border border-zinc-700/40'}`}>{c}</span>
+                          <span key={c} className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md border ${COIN_COLORS[c]?.badge || 'bg-zinc-700/20 text-zinc-400 border border-zinc-700/30'}`}>{c}</span>
                         ))}
                       </div>
                     )}
@@ -470,7 +465,7 @@ export default function Dashboard() {
                       <p className="text-[11px] text-zinc-400 mt-1.5 leading-snug">{a.insight}</p>
                     )}
                     <div className="flex items-center gap-2 mt-1.5">
-                      <span className="text-[10px] text-zinc-600 bg-zinc-800/80 px-1.5 py-0.5 rounded">{a.source}</span>
+                      <span className="text-[10px] text-zinc-600 bg-zinc-800/60 px-1.5 py-0.5 rounded">{a.source}</span>
                       <span className="text-[10px] text-zinc-700">{new Date(a.published).toLocaleString()}</span>
                     </div>
                   </a>
@@ -481,12 +476,12 @@ export default function Dashboard() {
         )}
 
         {/* Recent Alerts */}
-        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '350ms' }}>
+        <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '350ms' }}>
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Recent Alerts</h2>
-          <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Same alert won&apos;t repeat until conditions change</p>
+          <p className="text-[11px] text-zinc-600 mt-0.5 mb-3 sm:mb-4">Same alert won&apos;t repeat until conditions change</p>
           {!status?.alerts || status.alerts.length === 0 ? (
-            <div className="text-center py-6 sm:py-8">
-              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-zinc-800/60 flex items-center justify-center">
+            <div className="text-center py-8">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-800/40 flex items-center justify-center">
                 <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
@@ -497,7 +492,7 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2">
               {status.alerts.map((a, i) => (
-                <div key={i} className="bg-zinc-800/30 rounded-xl p-3 sm:p-3.5 border-l-2 border-amber-500/40">
+                <div key={i} className="bg-zinc-800/20 rounded-xl p-3.5 border-l-2 border-amber-500/30">
                   <p className="text-[10px] text-zinc-600 font-mono">{new Date(a.time).toLocaleString()}</p>
                   <p className="text-[13px] sm:text-sm text-zinc-200 mt-1.5 whitespace-pre-line leading-relaxed">{a.message}</p>
                 </div>
@@ -507,11 +502,11 @@ export default function Dashboard() {
         </div>
 
         {/* Activity Log */}
-        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '400ms' }}>
+        <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '400ms' }}>
           <div className="flex items-center justify-between mb-3 sm:mb-4">
             <div>
               <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Activity Log</h2>
-              <p className="text-[11px] text-zinc-500 mt-0.5">Hourly price checks across all portfolios</p>
+              <p className="text-[11px] text-zinc-600 mt-0.5">Hourly price checks across all portfolios</p>
             </div>
             {(() => {
               const unseenAlerts = activity.filter(e => e.alertCount > 0 && (!alertsSeenAt || new Date(e.time) > new Date(alertsSeenAt)));
@@ -523,17 +518,17 @@ export default function Dashboard() {
                     const data = await res.json();
                     setAlertsSeenAt(data.seenAt);
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg text-[10px] sm:text-[11px] font-medium text-amber-300 transition-colors cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/8 hover:bg-amber-500/15 border border-amber-500/20 rounded-lg text-[10px] sm:text-[11px] font-medium text-amber-300 transition-colors cursor-pointer"
                 >
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse-dot" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse-dot" />
                   {unseenAlerts.length} new
                 </button>
               );
             })()}
           </div>
           {activity.length === 0 ? (
-            <div className="text-center py-6 sm:py-8">
-              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-zinc-800/60 flex items-center justify-center">
+            <div className="text-center py-8">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-800/40 flex items-center justify-center">
                 <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
                 </svg>
@@ -542,34 +537,26 @@ export default function Dashboard() {
               <p className="text-zinc-600 text-xs mt-1">First check happens on next cron run.</p>
             </div>
           ) : (
-            <div className="space-y-1.5 max-h-64 sm:max-h-80 overflow-y-auto pr-1">
+            <div className="space-y-1 max-h-72 sm:max-h-80 overflow-y-auto pr-1">
               {activity.slice(0, 48).map((entry, i) => {
                 const isUnseen = entry.alertCount > 0 && (!alertsSeenAt || new Date(entry.time) > new Date(alertsSeenAt));
                 return (
-                <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2 sm:py-2.5 transition-colors ${
-                  isUnseen ? 'bg-amber-500/5 border border-amber-500/20' : 'bg-zinc-800/20 hover:bg-zinc-800/30'
+                <div key={i} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+                  isUnseen ? 'bg-amber-500/5 border border-amber-500/15' : 'bg-zinc-800/15 hover:bg-zinc-800/25'
                 }`}>
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${
-                    isUnseen ? 'bg-amber-400 animate-pulse-dot' : entry.alertCount > 0 ? 'bg-amber-400' : 'bg-emerald-600'
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                    isUnseen ? 'bg-amber-400 animate-pulse-dot' : entry.alertCount > 0 ? 'bg-amber-400' : 'bg-emerald-500/60'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                      <span className="text-[10px] sm:text-[11px] text-zinc-500 font-mono">
-                        {new Date(entry.time).toLocaleString()}
-                      </span>
+                      <span className="text-[10px] sm:text-[11px] text-zinc-500 font-mono">{new Date(entry.time).toLocaleString()}</span>
                       <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded ${
-                        entry.alertCount > 0
-                          ? 'bg-amber-500/10 text-amber-400'
-                          : 'bg-zinc-700/40 text-zinc-500'
-                      }`}>
-                        {entry.summary}
-                      </span>
+                        entry.alertCount > 0 ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-700/30 text-zinc-500'
+                      }`}>{entry.summary}</span>
                     </div>
                     {entry.prices && (
                       <p className="text-[9px] sm:text-[10px] text-zinc-600 mt-0.5 font-mono tabular-nums truncate">
-                        {Object.entries(entry.prices).map(([c, p]) =>
-                          p ? `${c}: $${Number(p).toLocaleString()}` : null
-                        ).filter(Boolean).join(' \u00b7 ')}
+                        {Object.entries(entry.prices).map(([c, p]) => p ? `${c}: $${Number(p).toLocaleString()}` : null).filter(Boolean).join(' \u00b7 ')}
                       </p>
                     )}
                   </div>
@@ -582,9 +569,8 @@ export default function Dashboard() {
 
         {/* KV Warning */}
         {status && !status.kvConfigured && (
-          <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 text-sm text-amber-300/80">
-            <strong>Database not connected.</strong> Settings won&apos;t persist.
-            Add Upstash Redis credentials in Vercel.
+          <div className="bg-amber-500/5 border border-amber-500/15 rounded-2xl p-4 text-sm text-amber-300/80">
+            <strong>Database not connected.</strong> Settings won&apos;t persist. Add Upstash Redis credentials in Vercel.
           </div>
         )}
 
@@ -603,7 +589,7 @@ export default function Dashboard() {
 function Row({ label, children }) {
   return (
     <div className="flex justify-between items-center py-0.5">
-      <span className="text-zinc-500 text-[11px] sm:text-xs">{label}</span>
+      <span className="text-zinc-500 text-[11px]">{label}</span>
       <span className="text-[13px] sm:text-sm">{children}</span>
     </div>
   );
@@ -611,20 +597,20 @@ function Row({ label, children }) {
 
 function CheckRow({ label, desc, active, isInfo }) {
   return (
-    <div className={`flex items-center gap-3 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 h-full transition-all duration-150 active:scale-[0.98] sm:active:scale-100 ${
-      active ? 'bg-amber-500/[0.08] border border-amber-500/25' : 'bg-zinc-800/30 border border-zinc-800/50 hover:bg-zinc-800/40'
+    <div className={`flex items-center gap-3 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 h-full transition-all duration-200 ${
+      active ? 'bg-amber-500/[0.06] border border-amber-500/20' : 'bg-zinc-800/20 border border-zinc-800/30 hover:bg-zinc-800/30'
     }`}>
-      <span className={`w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full shrink-0 ${
-        active ? 'bg-amber-400 animate-pulse-dot' : isInfo ? 'bg-zinc-600' : 'bg-emerald-600'
+      <span className={`w-2 h-2 rounded-full shrink-0 ${
+        active ? 'bg-amber-400 animate-pulse-dot' : isInfo ? 'bg-zinc-600' : 'bg-emerald-500/60'
       }`} />
       <div className="flex-1 min-w-0">
-        <p className={`text-[13px] sm:text-sm font-semibold ${active ? 'text-amber-300' : 'text-zinc-200'}`}>{label}</p>
+        <p className={`text-[13px] sm:text-sm font-semibold tracking-tight ${active ? 'text-amber-300' : 'text-zinc-200'}`}>{label}</p>
         <p className="text-[10px] sm:text-[11px] text-zinc-500 mt-0.5">{desc}</p>
       </div>
-      <span className={`text-[9px] sm:text-[10px] font-semibold uppercase px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 ${
-        active ? 'bg-amber-500/15 text-amber-400' : 'bg-zinc-700/40 text-zinc-600'
+      <span className={`text-[9px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 tracking-wider ${
+        active ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-700/30 text-zinc-600'
       }`}>
-        {active ? 'TRIGGERED' : 'quiet'}
+        {active ? 'ACTIVE' : 'quiet'}
       </span>
     </div>
   );

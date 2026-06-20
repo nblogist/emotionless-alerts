@@ -2,12 +2,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { COIN_COLORS, DEFAULT_COLOR } from '@/lib/coins';
+import { COIN_COLORS, DEFAULT_COLOR, COIN_ICONS, COIN_NAMES } from '@/lib/coins';
 import { fmtUsd, fmtPrice, fmtCoinAmt } from '@/lib/format';
 import BottomNav from '@/components/BottomNav';
 import TransactionModal from '@/components/TransactionModal';
-
-const COIN_NAMES = { BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana', AQUARI: 'Aquari', XAUT: 'Tether Gold' };
 
 export default function CoinDetail() {
   const { symbol } = useParams();
@@ -113,7 +111,12 @@ export default function CoinDetail() {
   if (loading || !activePid) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-9 h-9 border-2 border-zinc-800 border-t-emerald-500 rounded-full animate-spin" />
+        <div className="relative">
+          <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center animate-float shadow-lg ${colors.glow}`}>
+            <span className="text-white text-sm font-bold">{COIN_ICONS[coin] || '?'}</span>
+          </div>
+          <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${colors.gradient} opacity-20 animate-ping`} />
+        </div>
       </div>
     );
   }
@@ -133,12 +136,6 @@ export default function CoinDetail() {
   const totalSold = sells.reduce((s, t) => s + t.amount, 0);
   const totalSpent = buys.reduce((s, t) => s + t.amount * t.pricePerCoin, 0);
   const totalReceived = sells.reduce((s, t) => s + t.amount * t.pricePerCoin, 0);
-
-  // To find the real index in the full transaction list, we need all transactions
-  // Since we filtered by coin in the API, we need to map back to the full list index
-  // We'll fetch full list on delete/edit — or store real indices
-  // Actually the GET filters by coin but the indices refer to the full list
-  // Let me rethink: we need real indices for edit/delete
 
   return (
     <div className="min-h-screen">
@@ -165,23 +162,25 @@ export default function CoinDetail() {
       )}
 
       {/* Header */}
-      <header className="border-b border-zinc-800/40 sticky top-0 z-10 bg-zinc-950/80 backdrop-blur-xl">
+      <header className="border-b border-zinc-800/30 sticky top-0 z-10 bg-zinc-950/60 backdrop-blur-2xl">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Link href={`/transactions?portfolio=${activePid}`} className="text-zinc-500 hover:text-zinc-300 transition-colors text-sm flex items-center gap-1">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
               <span className="hidden sm:inline">Back</span>
             </Link>
-            <div className="w-px h-4 bg-zinc-800" />
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-md ${colors.badge}`}>{coin}</span>
-            <h1 className="text-base font-bold">{COIN_NAMES[coin] || coin}</h1>
+            <div className="w-px h-4 bg-zinc-800/50" />
+            <div className={`w-7 h-7 rounded-lg bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-md ${colors.glow}`}>
+              <span className="text-white text-[10px] font-bold">{COIN_ICONS[coin] || '?'}</span>
+            </div>
+            <h1 className="text-base font-bold tracking-tight">{COIN_NAMES[coin] || coin}</h1>
           </div>
           <div className="flex items-center gap-2">
             {portfolios.length > 1 && (
               <select
                 value={activePid}
                 onChange={(e) => switchPortfolio(e.target.value)}
-                className="bg-zinc-800/80 border border-zinc-700/40 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/50 cursor-pointer transition-colors"
+                className="bg-zinc-800/50 border border-zinc-700/30 rounded-xl px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 cursor-pointer transition-all"
               >
                 {portfolios.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -190,7 +189,7 @@ export default function CoinDetail() {
             )}
             <button
               onClick={() => setModal({ mode: 'add' })}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-lg shadow-emerald-500/10"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
               Add
@@ -201,92 +200,101 @@ export default function CoinDetail() {
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-24 sm:pb-6 space-y-4">
         {/* Price Header */}
-        <div className={`${colors.border} border-t-2 bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-5 sm:p-6 animate-fade-up`}>
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">{COIN_NAMES[coin] || coin} Price</p>
-              <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums tracking-tight">
-                {price ? fmtPrice(price) : '--'}
-              </p>
+        <div className="glass rounded-2xl p-5 sm:p-6 animate-fade-up relative overflow-hidden">
+          {/* Decorative blur orbs */}
+          <div className={`absolute -top-16 -right-16 w-40 h-40 bg-gradient-to-br ${colors.gradient} opacity-[0.06] rounded-full blur-2xl pointer-events-none`} />
+          <div className="absolute -bottom-10 -left-10 w-28 h-28 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
+
+          <div className="relative">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg ${colors.glow}`}>
+                  <span className="text-white text-sm font-bold">{COIN_ICONS[coin] || '?'}</span>
+                </div>
+                <div>
+                  <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">{COIN_NAMES[coin] || coin} Price</p>
+                  <p className="text-3xl sm:text-4xl font-mono font-bold mt-0.5 tabular-nums tracking-tighter">
+                    {price ? fmtPrice(price) : '--'}
+                  </p>
+                </div>
+              </div>
+              {asset?.avgCost > 0 && (
+                <span className={`text-sm font-mono font-semibold px-3 py-1.5 rounded-xl border ${
+                  pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+                }`}>
+                  {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                </span>
+              )}
             </div>
-            {asset?.avgCost > 0 && (
-              <span className={`text-sm font-mono font-semibold px-3 py-1.5 rounded-lg ${
-                pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-              }`}>
-                {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
-              </span>
+
+            {/* Holdings Card */}
+            {asset?.avgCost > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-zinc-700/20 pt-4">
+                <div className="bg-zinc-800/20 rounded-xl p-3">
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Holdings</p>
+                  <p className="text-sm sm:text-base font-mono font-bold mt-1 tabular-nums">{fmtCoinAmt(totalCoins)} <span className="text-zinc-500 text-[10px]">{coin}</span></p>
+                </div>
+                <div className="bg-zinc-800/20 rounded-xl p-3">
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Current Value</p>
+                  <p className="text-sm sm:text-base font-mono font-bold mt-1 tabular-nums">{fmtUsd(currentValue)}</p>
+                </div>
+                <div className="bg-zinc-800/20 rounded-xl p-3">
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Total Cost</p>
+                  <p className="text-sm sm:text-base font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtUsd(totalCost)}</p>
+                </div>
+                <div className="bg-zinc-800/20 rounded-xl p-3">
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Profit / Loss</p>
+                  <p className={`text-sm sm:text-base font-mono font-bold mt-1 tabular-nums ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
+                  </p>
+                </div>
+                <div className="bg-zinc-800/20 rounded-xl p-3">
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Avg Net Cost</p>
+                  <p className="text-sm font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtPrice(asset.avgCost)}</p>
+                </div>
+                <div className="bg-zinc-800/20 rounded-xl p-3">
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Total Bought</p>
+                  <p className="text-sm font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtCoinAmt(totalBought)} <span className="text-zinc-600 text-[10px]">({fmtUsd(totalSpent)})</span></p>
+                </div>
+                {totalSold > 0 && (
+                  <div className="bg-zinc-800/20 rounded-xl p-3">
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Total Sold</p>
+                    <p className="text-sm font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtCoinAmt(totalSold)} <span className="text-zinc-600 text-[10px]">({fmtUsd(totalReceived)})</span></p>
+                  </div>
+                )}
+                {asset.lastActionPrice > 0 && (
+                  <div className="bg-zinc-800/20 rounded-xl p-3">
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Last Action Price</p>
+                    <p className="text-sm font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtPrice(asset.lastActionPrice)}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="border-t border-zinc-700/20 pt-4">
+                <p className="text-sm text-zinc-500">No position held. Add a transaction to start tracking.</p>
+              </div>
             )}
           </div>
-
-          {/* Holdings Card */}
-          {asset?.avgCost > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 border-t border-zinc-800/40 pt-4">
-              <div>
-                <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Holdings</p>
-                <p className="text-sm sm:text-base font-mono font-bold mt-0.5 tabular-nums">{fmtCoinAmt(totalCoins)} <span className="text-zinc-500 text-[10px]">{coin}</span></p>
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Current Value</p>
-                <p className="text-sm sm:text-base font-mono font-bold mt-0.5 tabular-nums">{fmtUsd(currentValue)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Total Cost</p>
-                <p className="text-sm sm:text-base font-mono font-bold text-zinc-400 mt-0.5 tabular-nums">{fmtUsd(totalCost)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Profit / Loss</p>
-                <p className={`text-sm sm:text-base font-mono font-bold mt-0.5 tabular-nums ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Avg Net Cost</p>
-                <p className="text-sm font-mono font-bold text-zinc-400 mt-0.5 tabular-nums">{fmtPrice(asset.avgCost)}</p>
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Total Bought</p>
-                <p className="text-sm font-mono font-bold text-zinc-400 mt-0.5 tabular-nums">{fmtCoinAmt(totalBought)} <span className="text-zinc-600 text-[10px]">({fmtUsd(totalSpent)})</span></p>
-              </div>
-              {totalSold > 0 && (
-                <div>
-                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Total Sold</p>
-                  <p className="text-sm font-mono font-bold text-zinc-400 mt-0.5 tabular-nums">{fmtCoinAmt(totalSold)} <span className="text-zinc-600 text-[10px]">({fmtUsd(totalReceived)})</span></p>
-                </div>
-              )}
-              {asset.lastActionPrice > 0 && (
-                <div>
-                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Last Action Price</p>
-                  <p className="text-sm font-mono font-bold text-zinc-400 mt-0.5 tabular-nums">{fmtPrice(asset.lastActionPrice)}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="border-t border-zinc-800/40 pt-4">
-              <p className="text-sm text-zinc-500">No position held. Add a transaction to start tracking.</p>
-            </div>
-          )}
         </div>
 
         {/* Transaction History */}
-        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-5 animate-fade-up" style={{ animationDelay: '50ms' }}>
+        <div className="glass rounded-2xl p-5 animate-fade-up" style={{ animationDelay: '50ms' }}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
               Transactions <span className="text-zinc-600 normal-case font-normal ml-1">({transactions.length})</span>
             </h2>
             <button
               onClick={() => setModal({ mode: 'add' })}
-              className="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors cursor-pointer"
+              className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold transition-colors cursor-pointer"
             >
               + Add transaction
             </button>
           </div>
 
           {transactions.length === 0 ? (
-            <div className="text-center py-10">
-              <div className="w-10 h-10 mx-auto mb-3 rounded-full bg-zinc-800/60 flex items-center justify-center">
-                <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
+            <div className="text-center py-12">
+              <div className={`w-12 h-12 mx-auto mb-3 rounded-2xl bg-gradient-to-br ${colors.gradient} opacity-20 flex items-center justify-center`}>
+                <span className="text-white text-sm font-bold opacity-60">{COIN_ICONS[coin] || '?'}</span>
               </div>
               <p className="text-zinc-500 text-sm">No transactions for {coin}</p>
               <p className="text-zinc-600 text-xs mt-1">Add your first buy or sell above.</p>
@@ -295,7 +303,6 @@ export default function CoinDetail() {
             <TransactionList
               transactions={transactions}
               coin={coin}
-              allTransactions={null}
               activePid={activePid}
               onEdit={(idx, txn) => setModal({ mode: 'edit', index: idx, txn })}
               onDelete={handleDelete}
@@ -335,8 +342,8 @@ function TransactionList({ transactions, coin, activePid, onEdit, onDelete }) {
         const realIdx = realIndices[t.localIdx];
         const total = t.amount * t.pricePerCoin;
         return (
-          <div key={t.localIdx} className="flex items-center gap-3 bg-zinc-800/25 hover:bg-zinc-800/40 rounded-xl px-4 py-3 transition-colors group">
-            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md shrink-0 ${
+          <div key={t.localIdx} className="flex items-center gap-3 bg-zinc-800/20 hover:bg-zinc-800/35 rounded-xl px-4 py-3.5 transition-all group border border-transparent hover:border-zinc-700/20">
+            <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg shrink-0 ${
               t.type === 'buy'
                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                 : 'bg-red-500/10 text-red-400 border border-red-500/20'
@@ -345,17 +352,17 @@ function TransactionList({ transactions, coin, activePid, onEdit, onDelete }) {
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-mono text-zinc-200 tabular-nums">
-                {fmtCoinAmt(t.amount)} <span className="text-zinc-500">@</span> {fmtPrice(t.pricePerCoin)}
+                {fmtCoinAmt(t.amount)} <span className="text-zinc-600">@</span> {fmtPrice(t.pricePerCoin)}
               </p>
-              <p className="text-[10px] text-zinc-600">{t.date}{t.note ? ` \u00b7 ${t.note}` : ''}</p>
+              <p className="text-[10px] text-zinc-600 mt-0.5">{t.date}{t.note ? ` \u00b7 ${t.note}` : ''}</p>
             </div>
             <p className="text-sm font-mono font-semibold text-zinc-300 shrink-0 tabular-nums">
               {fmtUsd(total)}
             </p>
-            <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
               <button
                 onClick={() => realIdx !== undefined && onEdit(realIdx, t)}
-                className="text-zinc-600 hover:text-blue-400 transition-colors cursor-pointer p-1"
+                className="text-zinc-600 hover:text-blue-400 transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-zinc-700/30"
                 title="Edit"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -364,7 +371,7 @@ function TransactionList({ transactions, coin, activePid, onEdit, onDelete }) {
               </button>
               <button
                 onClick={() => realIdx !== undefined && onDelete(realIdx)}
-                className="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer p-1"
+                className="text-zinc-600 hover:text-red-400 transition-colors cursor-pointer p-1.5 rounded-lg hover:bg-red-500/10"
                 title="Delete"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

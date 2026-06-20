@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { COIN_COLORS, DEFAULT_COLOR } from '@/lib/coins';
+import { COIN_COLORS, DEFAULT_COLOR, COIN_ICONS, COIN_NAMES } from '@/lib/coins';
 import { fmtUsd, fmtPrice, fmtCoinAmt } from '@/lib/format';
 import BottomNav from '@/components/BottomNav';
 import TransactionModal from '@/components/TransactionModal';
@@ -88,7 +88,12 @@ export default function Transactions() {
   if (loading || !activePid) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="w-9 h-9 border-2 border-zinc-800 border-t-emerald-500 rounded-full animate-spin" />
+        <div className="relative">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center animate-float shadow-lg shadow-emerald-500/20">
+            <span className="text-white text-xs font-black tracking-tighter">EA</span>
+          </div>
+          <div className="absolute inset-0 rounded-2xl bg-emerald-500/20 animate-ping" />
+        </div>
       </div>
     );
   }
@@ -152,20 +157,20 @@ export default function Transactions() {
       )}
 
       {/* Header */}
-      <header className="border-b border-zinc-800/40 sticky top-0 z-10 bg-zinc-950/80 backdrop-blur-xl">
+      <header className="border-b border-zinc-800/30 sticky top-0 z-10 bg-zinc-950/60 backdrop-blur-2xl">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Link href={`/?portfolio=${activePid}`} className="hidden sm:flex text-zinc-500 hover:text-zinc-300 transition-colors text-sm items-center gap-1">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7"/></svg>
               Dashboard
             </Link>
-            <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
-            <h1 className="text-base font-bold">Portfolio</h1>
+            <div className="w-px h-4 bg-zinc-800/50 hidden sm:block" />
+            <h1 className="text-base font-bold tracking-tight">Portfolio</h1>
             {portfolios.length > 1 && (
               <select
                 value={activePid}
                 onChange={(e) => switchPortfolio(e.target.value)}
-                className="bg-zinc-800/80 border border-zinc-700/40 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/50 cursor-pointer transition-colors"
+                className="bg-zinc-800/50 border border-zinc-700/30 rounded-xl px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 cursor-pointer transition-all"
               >
                 {portfolios.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -175,7 +180,7 @@ export default function Transactions() {
           </div>
           <button
             onClick={() => setModal({ mode: 'add' })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-lg shadow-emerald-500/10"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-lg shadow-emerald-500/20"
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/></svg>
             Add
@@ -197,25 +202,30 @@ export default function Transactions() {
         )}
 
         {/* Total balance card */}
-        <div className="bg-zinc-900/60 border border-zinc-800/50 rounded-2xl p-5 animate-fade-up" style={{ animationDelay: '30ms' }}>
-          <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Balance</p>
-          <p className="text-3xl font-mono font-bold mt-1 tabular-nums tracking-tight">{fmtUsd(totalValue)}</p>
-          {totalCost > 0 && (
-            <div className="flex items-center gap-3 mt-2">
-              <span className={`text-sm font-mono font-semibold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
-              </span>
-              <span className={`text-xs font-mono px-2 py-0.5 rounded-md ${
-                totalPnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-              }`}>
-                {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
-              </span>
-            </div>
-          )}
+        <div className="glass rounded-2xl p-5 sm:p-6 animate-fade-up relative overflow-hidden" style={{ animationDelay: '30ms' }}>
+          {/* Decorative blur orbs */}
+          <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/8 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="relative">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Balance</p>
+            <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums tracking-tighter">{fmtUsd(totalValue)}</p>
+            {totalCost > 0 && (
+              <div className="flex items-center gap-3 mt-2.5">
+                <span className={`text-sm font-mono font-semibold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
+                </span>
+                <span className={`text-xs font-mono px-2.5 py-1 rounded-lg ${
+                  totalPnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                }`}>
+                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Coin rows */}
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {coinList.map(({ asset, txns }, idx) => {
             const sym = asset.symbol;
             const colors = COIN_COLORS[sym] || DEFAULT_COLOR;
@@ -229,22 +239,25 @@ export default function Transactions() {
               <Link
                 key={sym}
                 href={`/coin/${sym.toLowerCase()}?portfolio=${activePid}`}
-                className={`block bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 hover:bg-zinc-900/80 hover:border-zinc-700/50 transition-all active:scale-[0.98] sm:active:scale-100 animate-fade-up`}
+                className={`block glass rounded-2xl p-4 hover:ring-1 ${colors.ring} hover:bg-zinc-800/40 transition-all active:scale-[0.98] sm:active:scale-100 animate-fade-up group`}
                 style={{ animationDelay: `${60 + idx * 40}ms` }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3.5">
+                  {/* Coin avatar */}
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${colors.gradient} flex items-center justify-center shadow-lg ${colors.glow} shrink-0`}>
+                    <span className="text-white text-xs font-bold">{COIN_ICONS[sym] || '?'}</span>
+                  </div>
+
                   {/* Coin info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${colors.badge}`}>{sym}</span>
-                      {txns.length > 0 && (
-                        <span className="text-[10px] text-zinc-600">{txns.length} txn{txns.length !== 1 ? 's' : ''}</span>
-                      )}
+                      <span className="text-sm font-bold">{sym}</span>
+                      <span className="text-[11px] text-zinc-500">{COIN_NAMES[sym] || sym}</span>
                     </div>
-                    <div className="flex items-baseline gap-2 mt-1.5">
-                      <span className="text-lg font-mono font-bold tabular-nums">{price ? fmtPrice(price) : '--'}</span>
+                    <div className="flex items-baseline gap-2 mt-0.5">
+                      <span className="text-sm font-mono text-zinc-400 tabular-nums">{price ? fmtPrice(price) : '--'}</span>
                       {asset.avgCost > 0 && (
-                        <span className={`text-xs font-mono font-semibold ${pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        <span className={`text-[11px] font-mono font-semibold ${pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
                         </span>
                       )}
@@ -266,7 +279,7 @@ export default function Transactions() {
                   </div>
 
                   {/* Arrow */}
-                  <svg className="w-4 h-4 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <svg className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/>
                   </svg>
                 </div>
@@ -276,13 +289,18 @@ export default function Transactions() {
         </div>
 
         {coinList.length === 0 && (
-          <div className="text-center py-10">
+          <div className="text-center py-14">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-800/40 flex items-center justify-center">
+              <svg className="w-6 h-6 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
             <p className="text-zinc-500 text-sm">No assets in this portfolio</p>
             <p className="text-zinc-600 text-xs mt-1">Add a transaction to get started.</p>
           </div>
         )}
 
-        <footer className="text-center text-[11px] text-zinc-700 pt-4 pb-8 hidden sm:block">
+        <footer className="text-center text-[11px] text-zinc-600 pt-4 pb-8 hidden sm:block">
           Tap a coin to see details and full transaction history.
         </footer>
       </main>
