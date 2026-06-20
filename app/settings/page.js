@@ -357,18 +357,18 @@ export default function Settings() {
         {(config?.assets || []).map((asset, idx) => (
           <Section key={asset.symbol} title={asset.symbol} badge={asset.symbol} delay={150 + idx * 40}>
             <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] px-2 py-0.5 rounded-md border ${asset.class === 'liquid' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>{asset.class}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-md border ${asset.class === 'liquid' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`} title={asset.class === 'liquid' ? 'Traded on major exchanges with reliable volume. Standard buy/sell rules apply.' : 'Small-cap token with special safeguards: slippage limits, volume checks, and cooldown periods.'}>{asset.class}</span>
             </div>
             <Field
               label="Weight"
               value={asset.weight != null ? (asset.weight * 100).toFixed(0) : ''}
               onChange={(v) => update(`assets.${idx}.weight`, Number(v) / 100)}
               suffix="%"
-              hint="Target portfolio weight"
+              hint="Target allocation as % of total capital"
             />
-            <Field label="Holdings (USD)" value={asset.holdingsUsd} onChange={(v) => update(`assets.${idx}.holdingsUsd`, Number(v))} prefix="$" hint="Total cost basis of position" />
+            <Field label="Cost Basis (USD)" value={asset.holdingsUsd} onChange={(v) => update(`assets.${idx}.holdingsUsd`, Number(v))} prefix="$" hint="Total amount invested in this position" />
             <Field label="Avg Cost" value={asset.avgCost} onChange={(v) => update(`assets.${idx}.avgCost`, Number(v))} prefix="$" hint="Your average entry price" />
-            <Field label="Last Action Price" value={asset.lastActionPrice} onChange={(v) => update(`assets.${idx}.lastActionPrice`, Number(v))} prefix="$" hint="Price at last buy/sell — skim triggers 20% above this" />
+            <Field label="Last Trade Price" value={asset.lastActionPrice} onChange={(v) => update(`assets.${idx}.lastActionPrice`, Number(v))} prefix="$" hint="Price at your last buy or sell. Take-profit alert fires when price rises 20% above this." />
           </Section>
         ))}
 

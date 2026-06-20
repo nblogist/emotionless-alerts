@@ -147,7 +147,7 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
             {/* Amount + Price */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-[11px] text-zinc-500 mb-2 block font-medium uppercase tracking-wider">Quantity</label>
+                <label className="text-[11px] text-zinc-500 mb-2 block font-medium uppercase tracking-wider">Quantity ({form.coin})</label>
                 <input
                   type="number"
                   step="any"
@@ -159,7 +159,7 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
                 />
               </div>
               <div>
-                <label className="text-[11px] text-zinc-500 mb-2 block font-medium uppercase tracking-wider">Price ($)</label>
+                <label className="text-[11px] text-zinc-500 mb-2 block font-medium uppercase tracking-wider">Price per coin ($)</label>
                 <input
                   type="number"
                   step="any"

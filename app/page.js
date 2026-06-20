@@ -199,16 +199,20 @@ export default function Dashboard() {
                     </span>
                   )}
                   {activePortfolio?.telegramChatId && (
-                    <span className="text-[10px] text-zinc-600 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.67-.52.36-1 .53-1.42.52-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.74 3.98-1.73 6.64-2.87 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.53.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>
-                      on
-                    </span>
+                    <Tooltip text="Telegram alerts are enabled for this portfolio.">
+                      <span className="text-[10px] text-zinc-600 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.12.02-1.96 1.25-5.54 3.67-.52.36-1 .53-1.42.52-.47-.01-1.37-.26-2.03-.48-.82-.27-1.47-.42-1.42-.88.03-.24.37-.49 1.02-.74 3.98-1.73 6.64-2.87 7.97-3.44 3.8-1.58 4.59-1.86 5.1-1.87.11 0 .37.03.53.17.14.12.18.28.2.45-.01.06.01.24 0 .38z"/></svg>
+                        Telegram on
+                      </span>
+                    </Tooltip>
                   )}
                   {activePortfolio?.alertEmail && (
-                    <span className="text-[10px] text-zinc-600 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                      on
-                    </span>
+                    <Tooltip text="Email alerts are enabled for this portfolio.">
+                      <span className="text-[10px] text-zinc-600 flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        Email on
+                      </span>
+                    </Tooltip>
                   )}
                 </div>
 
@@ -223,7 +227,7 @@ export default function Dashboard() {
                       <p className="text-lg sm:text-xl font-mono font-bold text-zinc-400 mt-1.5 tabular-nums">{fmt(totalCost)}</p>
                     </div>
                     <div className="flex-1 sm:hidden">
-                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">P&L</p>
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Profit / Loss</p>
                       <p className={`text-lg font-mono font-bold mt-1.5 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                         {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
                         <span className="text-[10px] ml-1 opacity-70">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
@@ -231,7 +235,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="hidden sm:block">
-                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total P&L</p>
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Profit / Loss</p>
                     <p className={`text-xl font-mono font-bold mt-1.5 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                       {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
                       <span className="text-xs ml-1 opacity-70">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
@@ -294,7 +298,7 @@ export default function Dashboard() {
                     <span className="text-white text-sm font-bold">$</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium uppercase tracking-wider">{stablecoin} Dry Powder</p>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium uppercase tracking-wider">{stablecoin} Cash Reserve</p>
                     <p className="text-lg sm:text-xl font-mono font-bold tabular-nums tracking-tight mt-0.5">
                       {fmt(cash)}
                       <span className="text-xs text-zinc-500 font-sans ml-2">{cashPct.toFixed(1)}% of portfolio</span>
@@ -304,17 +308,21 @@ export default function Dashboard() {
 
                 {/* Right: Spendable vs Floor */}
                 <div className="flex gap-3 sm:gap-5">
-                  <div className="text-right">
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Spendable</p>
-                    <p className={`text-sm sm:text-base font-mono font-bold tabular-nums mt-0.5 ${
-                      spendable > 0 ? 'text-emerald-400' : 'text-amber-400'
-                    }`}>{fmt(spendable)}</p>
-                  </div>
+                  <Tooltip text="Cash above the 10% floor that you can deploy on dip-buys.">
+                    <div className="text-right">
+                      <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Spendable</p>
+                      <p className={`text-sm sm:text-base font-mono font-bold tabular-nums mt-0.5 ${
+                        spendable > 0 ? 'text-emerald-400' : 'text-amber-400'
+                      }`}>{fmt(spendable)}</p>
+                    </div>
+                  </Tooltip>
                   <div className="w-px bg-zinc-700/30" />
-                  <div className="text-right">
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">10% Floor</p>
-                    <p className="text-sm sm:text-base font-mono font-bold text-zinc-400 tabular-nums mt-0.5">{fmt(floor)}</p>
-                  </div>
+                  <Tooltip text="10% of portfolio value is always reserved as a safety buffer. This cash won't be used for dip-buys.">
+                    <div className="text-right">
+                      <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">10% Floor</p>
+                      <p className="text-sm sm:text-base font-mono font-bold text-zinc-400 tabular-nums mt-0.5">{fmt(floor)}</p>
+                    </div>
+                  </Tooltip>
                 </div>
               </div>
 
@@ -391,11 +399,13 @@ export default function Dashboard() {
                     </div>
                   </div>
                   {cc.avgCost > 0 && (
-                    <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-lg ${
-                      pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
-                    }`}>
-                      {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
-                    </span>
+                    <Tooltip text={`Unrealized profit/loss since your avg cost of ${fmtPrice(cc.avgCost)}.`}>
+                      <span className={`text-xs font-mono font-semibold px-2.5 py-1 rounded-lg ${
+                        pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                      }`}>
+                        P&L {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                      </span>
+                    </Tooltip>
                   )}
                 </div>
 
@@ -412,7 +422,7 @@ export default function Dashboard() {
                       <Row label="Cost">
                         <span className="font-mono tabular-nums text-zinc-400">{fmt(cc.holdingsUsd)}</span>
                       </Row>
-                      <Row label="P&L">
+                      <Row label="Profit / Loss">
                         <span className={`font-mono font-semibold tabular-nums ${pnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {pnlUsd >= 0 ? '+' : ''}{fmt(pnlUsd)}
                         </span>
@@ -440,10 +450,10 @@ export default function Dashboard() {
                             nearBuy ? 'bg-blue-500/8 border border-blue-500/20' : 'bg-zinc-800/20 border border-transparent'
                           }`}>
                             <span className={`text-[11px] font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
-                              {nearBuy ? 'BUY ZONE' : 'Target'}
+                              {nearBuy ? 'BUY ZONE' : 'Target alloc.'}
                             </span>
                             <span className={`font-mono text-[11px] tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
-                              {fmt(targetVal)} ({(deviation * 100).toFixed(1)}%)
+                              {fmt(targetVal)} ({(deviation * 100).toFixed(1)}% {deviation < 0 ? 'below' : 'above'})
                             </span>
                           </div>
                         </Tooltip>
@@ -455,13 +465,13 @@ export default function Dashboard() {
                           const skimValue = currentValue * 0.05;
                           const skimCoins = price > 0 ? skimValue / price : 0;
                           const gainPct = (skimGain * 100).toFixed(1);
-                          return `Skim 5% when ${coin} rises >=20% from last action AND above avg cost\n\nLast action: ${fmtPrice(lastAction)}\nSkim triggers at: ${fmtPrice(skimTriggerPrice)}\nAvg cost: ${fmtPrice(cc.avgCost)}\nPrice now: ${fmtPrice(price)} (${gainPct}% from last action)${nearSell ? ' \u2014 SKIM NOW' : ' \u2014 not there yet'}\n\nIf skimming now:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5% of position)\nProceeds: ~${fmt(skimValue)}\nRemaining 95% keeps riding`;
+                          return `Take profit: sell 5% when ${coin} rises >=20% from last action AND is above avg cost\n\nLast action: ${fmtPrice(lastAction)}\nTrigger price: ${fmtPrice(skimTriggerPrice)}\nAvg cost: ${fmtPrice(cc.avgCost)}\nPrice now: ${fmtPrice(price)} (${gainPct}% from last action)${nearSell ? ' \u2014 TAKE PROFIT' : ' \u2014 not there yet'}\n\nIf taking profit now:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5% of position)\nProceeds: ~${fmt(skimValue)}\nRemaining 95% keeps riding`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/8 border border-orange-500/20' : 'bg-zinc-800/20 border border-transparent'
                           }`}>
                             <span className={`text-[11px] font-medium whitespace-nowrap ${nearSell ? 'text-orange-300' : 'text-zinc-500'}`}>
-                              {nearSell ? 'SKIM ZONE' : 'Skim at'}
+                              {nearSell ? 'TAKE PROFIT' : 'Take profit at'}
                             </span>
                             <span className={`font-mono text-[11px] tabular-nums ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-500'}`}>
                               {fmtPrice(lastAction * 1.20)}
@@ -507,19 +517,21 @@ export default function Dashboard() {
 
         {/* 200-Week MA */}
         {status?.ma200 && (
-          <div className="glass rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-up" style={{ animationDelay: '250ms' }}>
-            <div>
-              <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">BTC 200-Week Moving Average</p>
-              <p className="text-xl sm:text-2xl font-mono font-bold mt-1 tabular-nums tracking-tight">${Math.round(status.ma200).toLocaleString()}</p>
+          <Tooltip block text="The 200-week moving average is a long-term trend indicator. When BTC trades above it, the market trend is considered healthy. Dropping below it has historically signaled extended downturns. The Crash Brake uses this to decide whether to de-risk.">
+            <div className="glass rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-up" style={{ animationDelay: '250ms' }}>
+              <div>
+                <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">BTC 200-Week Moving Average</p>
+                <p className="text-xl sm:text-2xl font-mono font-bold mt-1 tabular-nums tracking-tight">{'$'}{Math.round(status.ma200).toLocaleString()}</p>
+              </div>
+              <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg w-fit ${
+                (prices?.BTC || 0) > status.ma200
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                  : 'bg-red-500/10 text-red-400 border border-red-500/15'
+              }`}>
+                BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} {'\u2014'} {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
+              </span>
             </div>
-            <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg w-fit ${
-              (prices?.BTC || 0) > status.ma200
-                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-                : 'bg-red-500/10 text-red-400 border border-red-500/15'
-            }`}>
-              BTC is {(prices?.BTC || 0) > status.ma200 ? 'above' : 'below'} \u2014 {(prices?.BTC || 0) > status.ma200 ? 'healthy' : 'caution'}
-            </span>
-          </div>
+          </Tooltip>
         )}
 
         {/* Market News */}
@@ -528,7 +540,9 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market News</h2>
               {news.some(a => a.direction) && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/15">AI</span>
+                <Tooltip text="Sentiment and coin relevance detected by AI analysis of each headline.">
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/15">AI</span>
+                </Tooltip>
               )}
             </div>
             <p className="text-[11px] text-zinc-600 mt-0.5 mb-3 sm:mb-4">{news.some(a => a.direction) ? 'AI-filtered for your portfolio' : 'High-impact headlines, last 24h'}</p>
@@ -700,7 +714,7 @@ function CheckRow({ label, desc, active, isInfo }) {
       <span className={`text-[9px] sm:text-[10px] font-bold uppercase px-1.5 sm:px-2 py-0.5 rounded-md shrink-0 tracking-wider ${
         active ? 'bg-amber-500/10 text-amber-400' : 'bg-zinc-700/30 text-zinc-600'
       }`}>
-        {active ? 'ACTIVE' : 'quiet'}
+        {active ? 'ACTIVE' : 'OK'}
       </span>
     </div>
   );

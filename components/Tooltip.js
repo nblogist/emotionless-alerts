@@ -38,7 +38,7 @@ export default function Tooltip({ text, children, block }) {
   return (
     <Tag
       ref={ref}
-      className={`${block ? 'block' : 'inline-block'} cursor-help`}
+      className={`${block ? 'block' : 'inline-block'} cursor-help group/tip`}
       onPointerEnter={() => setOpen(true)}
       onPointerLeave={() => setOpen(false)}
       onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}

@@ -221,8 +221,8 @@ export default function CoinDetail() {
               {asset?.avgCost > 0 && (
                 <span className={`text-sm font-mono font-semibold px-3 py-1.5 rounded-xl border ${
                   pnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
-                }`}>
-                  {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(2)}%
+                }`} title={`Unrealized return based on your avg cost of ${fmtPrice(asset.avgCost)}`}>
+                  P&L {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
                 </span>
               )}
             </div>
@@ -243,13 +243,13 @@ export default function CoinDetail() {
                   <p className="text-sm sm:text-base font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtUsd(totalCost)}</p>
                 </div>
                 <div className="bg-zinc-800/20 rounded-xl p-3">
-                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Profit / Loss</p>
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium" title="Unrealized profit or loss based on current price vs your average cost">Profit / Loss</p>
                   <p className={`text-sm sm:text-base font-mono font-bold mt-1 tabular-nums ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                     {pnl >= 0 ? '+' : ''}{fmtUsd(pnl)}
                   </p>
                 </div>
                 <div className="bg-zinc-800/20 rounded-xl p-3">
-                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Avg Net Cost</p>
+                  <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium" title="Average cost per coin after accounting for partial sells">Avg Cost</p>
                   <p className="text-sm font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtPrice(asset.avgCost)}</p>
                 </div>
                 <div className="bg-zinc-800/20 rounded-xl p-3">
@@ -264,7 +264,7 @@ export default function CoinDetail() {
                 )}
                 {asset.lastActionPrice > 0 && (
                   <div className="bg-zinc-800/20 rounded-xl p-3">
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Last Action Price</p>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium" title="Price at your most recent buy or sell. Take-profit triggers at 20% above this.">Last Trade Price</p>
                     <p className="text-sm font-mono font-bold text-zinc-400 mt-1 tabular-nums">{fmtPrice(asset.lastActionPrice)}</p>
                   </div>
                 )}
@@ -356,8 +356,10 @@ function TransactionList({ transactions, coin, activePid, onEdit, onDelete }) {
               </p>
               <p className="text-[10px] text-zinc-600 mt-0.5">{t.date}{t.note ? ` \u00b7 ${t.note}` : ''}</p>
             </div>
-            <p className="text-sm font-mono font-semibold text-zinc-300 shrink-0 tabular-nums">
-              {fmtUsd(total)}
+            <p className={`text-sm font-mono font-semibold shrink-0 tabular-nums ${
+              t.type === 'sell' ? 'text-emerald-400' : 'text-zinc-300'
+            }`}>
+              {t.type === 'sell' ? '+' : '-'}{fmtUsd(total)}
             </p>
             <div className="flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
               <button

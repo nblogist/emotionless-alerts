@@ -207,17 +207,17 @@ export default function Transactions() {
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-emerald-500/8 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute -bottom-8 -left-8 w-24 h-24 bg-indigo-500/5 rounded-full blur-2xl pointer-events-none" />
           <div className="relative">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Balance</p>
+            <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Portfolio Value</p>
             <p className="text-3xl sm:text-4xl font-mono font-bold mt-1 tabular-nums tracking-tighter">{fmtUsd(totalValue)}</p>
             {totalCost > 0 && (
               <div className="flex items-center gap-3 mt-2.5">
                 <span className={`text-sm font-mono font-semibold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
+                  P&L {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
                 </span>
                 <span className={`text-xs font-mono px-2.5 py-1 rounded-lg ${
                   totalPnlPct >= 0 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
                 }`}>
-                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(2)}%
+                  {totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%
                 </span>
               </div>
             )}
@@ -257,8 +257,8 @@ export default function Transactions() {
                     <div className="flex items-baseline gap-2 mt-0.5">
                       <span className="text-sm font-mono text-zinc-400 tabular-nums">{price ? fmtPrice(price) : '--'}</span>
                       {asset.avgCost > 0 && (
-                        <span className={`text-[11px] font-mono font-semibold ${pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+                        <span className={`text-[11px] font-mono font-semibold ${pnlPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`} title="Unrealized profit/loss vs avg cost">
+                          P&L {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
                         </span>
                       )}
                     </div>
