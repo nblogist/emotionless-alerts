@@ -264,6 +264,96 @@ export default function Dashboard() {
           );
         })()}
 
+        {/* Dry-Powder Cash Card */}
+        {(() => {
+          const stablecoin = activePortfolio?.stablecoin || 'Cash';
+          const floor = portfolioValue * 0.10;
+          const spendable = Math.max(0, cash - floor);
+          const cashPct = portfolioValue > 0 ? (cash / portfolioValue) * 100 : 0;
+          const belowFloor = cash < floor;
+          const floorPct = portfolioValue > 0 ? (floor / portfolioValue) * 100 : 10;
+          const spendablePct = portfolioValue > 0 ? (spendable / portfolioValue) * 100 : 0;
+
+          return (
+            <div className={`glass rounded-2xl p-4 sm:p-5 relative overflow-hidden transition-all duration-300 ${
+              belowFloor ? 'ring-1 ring-amber-500/30' : 'ring-1 ring-blue-500/15'
+            }`}>
+              {/* Subtle gradient background */}
+              <div className={`absolute inset-0 opacity-[0.04] bg-gradient-to-br ${
+                belowFloor ? 'from-amber-500 to-orange-600' : 'from-blue-500 to-cyan-500'
+              } pointer-events-none`} />
+
+              <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
+                {/* Left: Icon + Amount */}
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0 ${
+                    belowFloor
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-600 shadow-amber-500/20'
+                      : 'bg-gradient-to-br from-blue-500 to-cyan-600 shadow-blue-500/20'
+                  }`}>
+                    <span className="text-white text-sm font-bold">$</span>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium uppercase tracking-wider">{stablecoin} Dry Powder</p>
+                    <p className="text-lg sm:text-xl font-mono font-bold tabular-nums tracking-tight mt-0.5">
+                      {fmt(cash)}
+                      <span className="text-xs text-zinc-500 font-sans ml-2">{cashPct.toFixed(1)}% of portfolio</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Right: Spendable vs Floor */}
+                <div className="flex gap-3 sm:gap-5">
+                  <div className="text-right">
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Spendable</p>
+                    <p className={`text-sm sm:text-base font-mono font-bold tabular-nums mt-0.5 ${
+                      spendable > 0 ? 'text-emerald-400' : 'text-amber-400'
+                    }`}>{fmt(spendable)}</p>
+                  </div>
+                  <div className="w-px bg-zinc-700/30" />
+                  <div className="text-right">
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">10% Floor</p>
+                    <p className="text-sm sm:text-base font-mono font-bold text-zinc-400 tabular-nums mt-0.5">{fmt(floor)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mt-3 relative">
+                <div className="h-1.5 rounded-full bg-zinc-800/60 overflow-hidden">
+                  {/* Floor portion */}
+                  <div
+                    className={`absolute h-full rounded-full ${belowFloor ? 'bg-amber-500/40' : 'bg-blue-500/30'}`}
+                    style={{ width: `${Math.min(cashPct, 100)}%` }}
+                  />
+                  {/* Spendable portion (on top of floor) */}
+                  {spendable > 0 && (
+                    <div
+                      className="absolute h-full rounded-full bg-emerald-500/60"
+                      style={{ width: `${Math.min(spendablePct, 100)}%`, left: `${Math.min(floorPct, cashPct)}%` }}
+                    />
+                  )}
+                </div>
+                {/* Floor marker */}
+                <div
+                  className="absolute top-0 h-1.5 w-px bg-zinc-400/40"
+                  style={{ left: `${Math.min(floorPct, 100)}%` }}
+                />
+              </div>
+
+              {/* Warning when below floor */}
+              {belowFloor && (
+                <div className="mt-3 flex items-start gap-2 bg-amber-500/5 border border-amber-500/15 rounded-lg px-3 py-2">
+                  <span className="text-amber-400 text-xs mt-px flex-shrink-0">&#9888;</span>
+                  <p className="text-[11px] sm:text-xs text-amber-400/80 leading-relaxed">
+                    Below 10% floor — no dip-buys until funded or a trim frees cash.
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Asset Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {assetList.map((asset, idx) => {

@@ -11,7 +11,7 @@ export async function GET() {
 
 export async function POST(request) {
   try {
-    const { name, telegramChatId, alertEmail } = await request.json();
+    const { name, telegramChatId, alertEmail, stablecoin } = await request.json();
     if (!name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 });
     }
@@ -20,7 +20,7 @@ export async function POST(request) {
     if (portfolios.some((p) => p.id === id)) {
       return NextResponse.json({ error: 'Portfolio with this name already exists' }, { status: 400 });
     }
-    const portfolio = { id, name, telegramChatId: telegramChatId || '', alertEmail: alertEmail || '' };
+    const portfolio = { id, name, telegramChatId: telegramChatId || '', alertEmail: alertEmail || '', stablecoin: stablecoin || '' };
     portfolios.push(portfolio);
     await store.set('portfolios', portfolios);
     // Seed default config for new portfolio
@@ -33,7 +33,7 @@ export async function POST(request) {
 
 export async function PUT(request) {
   try {
-    const { id, name, telegramChatId, alertEmail } = await request.json();
+    const { id, name, telegramChatId, alertEmail, stablecoin } = await request.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const portfolios = (await store.get('portfolios')) || DEFAULT_PORTFOLIOS;
     const idx = portfolios.findIndex((p) => p.id === id);
@@ -41,6 +41,7 @@ export async function PUT(request) {
     if (name) portfolios[idx].name = name;
     if (telegramChatId !== undefined) portfolios[idx].telegramChatId = telegramChatId;
     if (alertEmail !== undefined) portfolios[idx].alertEmail = alertEmail;
+    if (stablecoin !== undefined) portfolios[idx].stablecoin = stablecoin;
     await store.set('portfolios', portfolios);
     return NextResponse.json({ ok: true, portfolio: portfolios[idx] });
   } catch (e) {
