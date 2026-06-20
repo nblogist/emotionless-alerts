@@ -20,6 +20,10 @@ export async function lpush(key, value) {
   data.get(key).unshift(value);
 }
 
+export async function ping() {
+  return { ok: true };
+}
+
 export async function lrange(key, start, end) {
   const list = data.get(key) || [];
   return list.slice(start, end < 0 ? list.length + end + 1 : end + 1);

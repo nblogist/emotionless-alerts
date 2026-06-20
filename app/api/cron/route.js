@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as store from '@/lib/store';
 import { DEFAULT_CONFIG, DEFAULT_PORTFOLIOS, STRATEGY_CONFIG } from '@/lib/defaults';
-import { getLivePrices, fetchWeeklyCloses } from '@/lib/prices';
+import { fetchPricesSafe, fetchWeeklyCloses } from '@/lib/prices';
 import * as rules from '@/lib/rules';
 import { addReason, formatSignalWithReason } from '@/lib/ai-wording';
 import { checkAquariSell } from '@/lib/aquari';
@@ -9,8 +9,24 @@ import { sendTelegram } from '@/lib/telegram';
 import { sendEmail } from '@/lib/email';
 import { fetchAllRecentNews, fetchMarketNews, analyzeNewsWithAI, formatAINewsAlert, formatNewsAlert } from '@/lib/news';
 import { migrateConfig } from '@/lib/config-migrate';
+import { checkHeartbeatGap, formatPriceErrors } from '@/lib/health';
 
 export const dynamic = 'force-dynamic';
+
+// ── Send a system alert to all portfolios (for infrastructure failures) ──
+async function sendSystemAlert(portfolios, message) {
+  const results = [];
+  for (const pf of portfolios) {
+    const chatIds = (pf.telegramChatId || '').split(',').map(id => id.trim()).filter(Boolean);
+    for (const cid of chatIds) {
+      results.push(await sendTelegram(cid, message));
+    }
+    if (pf.alertEmail) {
+      results.push(await sendEmail('[System] Alert', message, [pf.alertEmail]));
+    }
+  }
+  return results;
+}
 
 export async function GET(request) {
   const auth = request.headers.get('authorization');
@@ -18,10 +34,42 @@ export async function GET(request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const now = new Date();
+
+  // Load portfolios early so crash handler can still notify
+  let portfolios;
   try {
-    const portfolios = (await store.get('portfolios')) || DEFAULT_PORTFOLIOS;
-    const prices = await getLivePrices();
-    const now = new Date();
+    portfolios = (await store.get('portfolios')) || DEFAULT_PORTFOLIOS;
+  } catch {
+    portfolios = DEFAULT_PORTFOLIOS;
+  }
+
+  try {
+    // ── 1. Heartbeat — detect stale/missed runs ──
+    const lastRun = await store.get('lastCronRun');
+    const heartbeat = checkHeartbeatGap(lastRun, now);
+
+    // ── 2. Fetch prices with validation ──
+    const { prices, errors: priceErrors, fetchedAt } = await fetchPricesSafe();
+
+    // Total price failure — bail safely, don't compute off missing data
+    if (Object.keys(prices).length === 0) {
+      const msg = formatPriceErrors(priceErrors) || 'Price feed down — no signals this run.';
+      await sendSystemAlert(portfolios, msg);
+      await store.set('lastCronRun', now.toISOString());
+      await store.lpush('activityLog', {
+        time: now.toISOString(),
+        alertCount: 0,
+        error: 'Price feed down',
+        errors: priceErrors,
+        summary: 'Price feed down — skipped all rules',
+      });
+      return NextResponse.json({ ok: false, error: 'Price feed down', errors: priceErrors });
+    }
+
+    // Partial price failure — build warning for affected assets
+    const priceWarning = formatPriceErrors(priceErrors);
+
     const isMonday = now.getUTCDay() === 1;
     const isMonthly = now.getUTCDate() === 1;
     const strat = STRATEGY_CONFIG;
@@ -95,12 +143,17 @@ export async function GET(request) {
     }
 
     let totalAlerts = 0;
+    const deliveryFailures = [];
 
     // ── Run rules for each portfolio ──
     for (const pf of portfolios) {
       const rawConfig = (await store.get(`config:${pf.id}`)) || DEFAULT_CONFIG;
       const config = migrateConfig(rawConfig);
       const alerts = [];
+
+      // Warnings go first so they're always visible
+      if (heartbeat.stale) alerts.push(heartbeat.message);
+      if (priceWarning) alerts.push(priceWarning);
 
       // Build portfolio context from config
       const assets = config.assets || [];
@@ -131,11 +184,11 @@ export async function GET(request) {
         assets: effectiveAssets,
       };
 
-      // Per-asset rules (liquid basket only — AQUARI handled separately in Batch 3)
+      // Per-asset rules (liquid basket only — AQUARI handled separately)
       for (const asset of effectiveAssets) {
         if (asset.class !== 'liquid') continue;
         const price = prices[asset.symbol];
-        if (!price) continue;
+        if (!price) continue;  // Skip assets with no valid price — never compute off garbage
 
         // Clear buy-dip alert if recovered
         await rules.clearBuyDipIfRecovered(asset, price, portfolio, pf.id);
@@ -164,7 +217,7 @@ export async function GET(request) {
         }
       }
 
-      // Microcap rules (AQUARI — liquidity-aware sell calculator, separate sleeve)
+      // Microcap rules (AQUARI — liquidity-aware sell calculator)
       for (const asset of effectiveAssets) {
         if (asset.class !== 'microcap') continue;
         try {
@@ -175,6 +228,7 @@ export async function GET(request) {
           }
         } catch (e) {
           console.error(`Microcap ${asset.symbol}:`, e.message);
+          alerts.push(`${asset.symbol} liquidity check failed: ${e.message}. Don't trade until next successful check.`);
         }
       }
 
@@ -196,15 +250,21 @@ export async function GET(request) {
       // News
       if (newsAlert) alerts.push(newsAlert);
 
-      // Send alerts
+      // ── Send alerts with delivery tracking ──
       if (alerts.length > 0) {
         const message = alerts.join('\n\n');
         const chatIds = (pf.telegramChatId || '').split(',').map((id) => id.trim()).filter(Boolean);
         for (const cid of chatIds) {
-          await sendTelegram(cid, message);
+          const r = await sendTelegram(cid, message);
+          if (!r.ok) {
+            deliveryFailures.push({ portfolio: pf.id, channel: 'telegram', chatId: cid, error: r.error });
+          }
         }
         if (pf.alertEmail) {
-          await sendEmail(`[${pf.name}] ${alerts.length} signal(s)`, message, [pf.alertEmail]);
+          const r = await sendEmail(`[${pf.name}] ${alerts.length} signal(s)`, message, [pf.alertEmail]);
+          if (!r.ok) {
+            deliveryFailures.push({ portfolio: pf.id, channel: 'email', error: r.error });
+          }
         }
         for (const a of alerts) {
           await store.lpush('alertHistory', { message: a, time: now.toISOString(), portfolio: pf.id });
@@ -216,9 +276,22 @@ export async function GET(request) {
       }
     }
 
+    // Log delivery failures for visibility
+    if (deliveryFailures.length > 0) {
+      console.error('Delivery failures:', JSON.stringify(deliveryFailures));
+      await store.lpush('deliveryFailures', {
+        time: now.toISOString(),
+        failures: deliveryFailures,
+      });
+    }
+
     if (totalAlerts === 0) {
       console.log('No signals across all portfolios.');
     }
+
+    // ── Heartbeat stamp ──
+    await store.set('lastCronRun', now.toISOString());
+    await store.set('pricesFetchedAt', fetchedAt);
 
     // Activity log
     const logEntry = {
@@ -226,6 +299,8 @@ export async function GET(request) {
       alertCount: totalAlerts,
       portfolioCount: portfolios.length,
       prices: Object.fromEntries([...allCoins].map((c) => [c, prices[c] || null])),
+      priceErrors: priceErrors.length > 0 ? priceErrors : undefined,
+      deliveryFailures: deliveryFailures.length > 0 ? deliveryFailures : undefined,
       aiNews: aiAnalysis ? aiAnalysis.length : 0,
       summary: totalAlerts > 0
         ? `${totalAlerts} signal(s) across ${portfolios.length} portfolio(s)`
@@ -233,9 +308,31 @@ export async function GET(request) {
     };
     await store.lpush('activityLog', logEntry);
 
-    return NextResponse.json({ ok: true, alerts: totalAlerts, portfolios: portfolios.length, prices, aiNews: aiAnalysis?.length || 0 });
+    return NextResponse.json({
+      ok: true,
+      alerts: totalAlerts,
+      portfolios: portfolios.length,
+      prices,
+      priceErrors: priceErrors.length > 0 ? priceErrors : undefined,
+      deliveryFailures: deliveryFailures.length > 0 ? deliveryFailures : undefined,
+      aiNews: aiAnalysis?.length || 0,
+    });
   } catch (err) {
     console.error('Cron error:', err);
+    // Try to notify about the crash — don't let this throw
+    try {
+      await sendSystemAlert(portfolios, [
+        `CRON ERROR — system needs attention`,
+        ``,
+        `The hourly check crashed: ${err.message}`,
+        `No signals were processed this run.`,
+        `This is not normal — check Vercel logs for details.`,
+      ].join('\n'));
+    } catch (notifyErr) {
+      console.error('Failed to send crash notification:', notifyErr.message);
+    }
+    // Still stamp heartbeat so we know the cron at least tried
+    try { await store.set('lastCronRun', now.toISOString()); } catch {}
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
