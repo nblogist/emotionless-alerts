@@ -10,6 +10,7 @@ import { sendEmail } from '@/lib/email';
 import { fetchAllRecentNews, fetchMarketNews, analyzeNewsWithAI, formatAINewsAlert, formatNewsAlert } from '@/lib/news';
 import { migrateConfig } from '@/lib/config-migrate';
 import { checkHeartbeatGap, formatPriceErrors } from '@/lib/health';
+import { validateSignal, getSignalAmount } from '@/lib/validate-signal';
 
 export const dynamic = 'force-dynamic';
 
@@ -145,6 +146,39 @@ export async function GET(request) {
     let totalAlerts = 0;
     const deliveryFailures = [];
 
+    // ── Audit + validate helper ──
+    // Validates signal, logs to audit, returns formatted text or null (if suppressed)
+    async function processSignal(signal, price, portfolio, pfId) {
+      if (!signal) return null;
+      await addReason(signal);
+
+      const check = validateSignal(signal, portfolio);
+      const amount = getSignalAmount(signal);
+      const auditEntry = {
+        timestamp: now.toISOString(),
+        portfolio: pfId,
+        asset: signal.asset || null,
+        action: signal.type,
+        amountUsd: amount,
+        priceUsed: price || signal.price || signal.spotPriceUsd || null,
+        dataFreshness: `price ${Math.round((now.getTime() - new Date(fetchedAt).getTime()) / 1000)}s old`,
+        reason: signal.reason || null,
+        status: check.valid ? 'pending' : 'suppressed',
+        suppressedReason: check.valid ? null : check.reason,
+      };
+
+      if (!check.valid) {
+        auditEntry.status = 'suppressed';
+        console.error(`[SUPPRESSED] ${signal.type} ${signal.asset}: ${check.reason}`);
+        await store.lpush('auditLog', auditEntry);
+        // Notify about the suppressed signal
+        return `SIGNAL SUPPRESSED: ${check.reason}. Signal blocked — needs attention.`;
+      }
+
+      await store.lpush('auditLog', auditEntry);
+      return formatSignalWithReason(signal);
+    }
+
     // ── Run rules for each portfolio ──
     for (const pf of portfolios) {
       const rawConfig = (await store.get(`config:${pf.id}`)) || DEFAULT_CONFIG;
@@ -193,27 +227,27 @@ export async function GET(request) {
         // Clear buy-dip alert if recovered
         await rules.clearBuyDipIfRecovered(asset, price, portfolio, pf.id);
 
-        // 1. BUY THE DIP — continuous, any time
-        const buyResult = await rules.checkBuyDip(asset, price, portfolio, pf.id, pf.name);
-        if (buyResult) {
-          await addReason(buyResult);
-          alerts.push(formatSignalWithReason(buyResult));
-        }
+        // 1. BUY THE DIP
+        const buyText = await processSignal(
+          await rules.checkBuyDip(asset, price, portfolio, pf.id, pf.name),
+          price, portfolio, pf.id,
+        );
+        if (buyText) alerts.push(buyText);
 
-        // 2. SKIM ON A POP — continuous
-        const skimResult = await rules.checkSkim(asset, price, pf.id, pf.name);
-        if (skimResult) {
-          await addReason(skimResult);
-          alerts.push(formatSignalWithReason(skimResult));
-        }
+        // 2. SKIM ON A POP
+        const skimText = await processSignal(
+          await rules.checkSkim(asset, price, pf.id, pf.name),
+          price, portfolio, pf.id,
+        );
+        if (skimText) alerts.push(skimText);
 
         // 3. BIG TRIM — monthly only
         if (isMonthly) {
-          const trimResult = await rules.checkBigTrim(asset, price, portfolio, pf.id, pf.name);
-          if (trimResult) {
-            await addReason(trimResult);
-            alerts.push(formatSignalWithReason(trimResult));
-          }
+          const trimText = await processSignal(
+            await rules.checkBigTrim(asset, price, portfolio, pf.id, pf.name),
+            price, portfolio, pf.id,
+          );
+          if (trimText) alerts.push(trimText);
         }
       }
 
@@ -221,31 +255,31 @@ export async function GET(request) {
       for (const asset of effectiveAssets) {
         if (asset.class !== 'microcap') continue;
         try {
-          const mcResult = await checkAquariSell(asset, prices, pf.id, pf.name, isMonthly);
-          if (mcResult) {
-            await addReason(mcResult);
-            alerts.push(formatSignalWithReason(mcResult));
-          }
+          const mcText = await processSignal(
+            await checkAquariSell(asset, prices, pf.id, pf.name, isMonthly),
+            prices[asset.symbol], portfolio, pf.id,
+          );
+          if (mcText) alerts.push(mcText);
         } catch (e) {
           console.error(`Microcap ${asset.symbol}:`, e.message);
           alerts.push(`${asset.symbol} liquidity check failed: ${e.message}. Don't trade until next successful check.`);
         }
       }
 
-      // Crash brake (shared BTC signal, per-portfolio flag)
+      // Crash brake (no dollar amount — skips validation)
       const crashBrakeEnabled = strat.crashBrake.enabled;
-      const crashResult = await rules.checkCrashBrake(btcCloses, ma200, pf.id, pf.name, crashBrakeEnabled);
-      if (crashResult) {
-        await addReason(crashResult);
-        alerts.push(formatSignalWithReason(crashResult));
-      }
+      const crashText = await processSignal(
+        await rules.checkCrashBrake(btcCloses, ma200, pf.id, pf.name, crashBrakeEnabled),
+        null, portfolio, pf.id,
+      );
+      if (crashText) alerts.push(crashText);
 
-      // Monthly summary
-      const monthlyResult = await rules.checkMonthly(portfolio, prices, pf.id, pf.name);
-      if (monthlyResult) {
-        await addReason(monthlyResult);
-        alerts.push(formatSignalWithReason(monthlyResult));
-      }
+      // Monthly summary (no dollar amount — skips validation)
+      const monthlyText = await processSignal(
+        await rules.checkMonthly(portfolio, prices, pf.id, pf.name),
+        null, portfolio, pf.id,
+      );
+      if (monthlyText) alerts.push(monthlyText);
 
       // News
       if (newsAlert) alerts.push(newsAlert);
@@ -265,6 +299,11 @@ export async function GET(request) {
           if (!r.ok) {
             deliveryFailures.push({ portfolio: pf.id, channel: 'email', error: r.error });
           }
+        }
+        // Update audit entries with delivery status
+        const auditEntries = await store.lrange('auditLog', 0, alerts.length - 1);
+        for (const entry of auditEntries) {
+          if (entry.status === 'pending') entry.status = 'sent';
         }
         for (const a of alerts) {
           await store.lpush('alertHistory', { message: a, time: now.toISOString(), portfolio: pf.id });

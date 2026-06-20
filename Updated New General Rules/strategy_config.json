@@ -1,0 +1,102 @@
+{
+  "version": "7.3",
+  "_what": "General, relative strategy rules. NO holdings, NO dollar amounts \u2014 the app owns all live numbers per portfolio and computes dollars. Goal: grow, lower avg cost, limit downside, compound.",
+  "globals": {
+    "mode": "advisory",
+    "showDollarAmounts": true,
+    "explainEverySignal": true,
+    "_explain": "Big-brother: every signal includes a plain-language reason (use OpenRouter AI to phrase).",
+    "useNewsHeadsUp": true,
+    "_news": "Fold the app's existing AI news scan into signals as volatility heads-ups."
+  },
+  "liquidBasket": {
+    "_use": "BTC / ETH / SOL / XAUT(gold). The rebalanced vol-harvest engine.",
+    "targetWeights": "equal by default (1/N each); app stores per-portfolio overrides",
+    "includeGoldAsMember": true,
+    "_gold_note": "XAUT is a full basket member \u2014 ballast that funds crypto dip-buying in crashes.",
+    "rebalance": {
+      "_model": "ASYMMETRIC \u2014 buy dips fast, trim winners slow.",
+      "buyDip": {
+        "trigger": "any asset > 10% BELOW target",
+        "cadence": "continuous (any time, as often as it happens)",
+        "action": "buy back up to target \u2014 catch every dip, lowers avg cost",
+        "cashFloorPct": 0.10,
+        "_cashFloor": "Never spend below 10% of portfolio value in cash. Only cash above the floor is spendable. If capped, signal shows ideal gap and explains the cap."
+      },
+      "trimWinner": {
+        "trigger": "any asset > 20% ABOVE target",
+        "cadence": "monthly",
+        "action": "trim back toward target \u2014 patient, never choke a runner"
+      },
+      "skimOnPump": {
+        "trigger": "asset up 20% from last action AND above avg cost",
+        "size": "5% of the position",
+        "cadence": "each fresh +20% leg (skim, reset reference, watch for the next)",
+        "action": "book a little cash, let the other 95% ride",
+        "_why": "User's call: book profit on a real 20% pop. Costs some upside vs waiting for 40%, but banks ~$2k/yr cash and the user will actually follow it."
+      }
+    },
+    "crashBrake": {
+      "enabled": false,
+      "reference": "BTC_200_week_MA",
+      "weeklyClosesBelow": 2,
+      "deRiskShiftOfCryptoTarget": 0.5,
+      "reRiskClosesAbove": 1,
+      "_note": "OFF for the Growth dial (max return). Turn on for the calmer dial."
+    }
+  },
+  "microcap": {
+    "_use": "AQUARI etc. Too illiquid to rebalance \u2014 liquidity-aware SELL calculator instead.",
+    "maxSlippagePct": 0.015,
+    "volumeCapPct": 0.2,
+    "_clip": "Suggested sell = largest size keeping price impact < maxSlippagePct (constant-product on live pool reserves), capped at volumeCapPct \u00d7 today's volume. Always shown with reasoning.",
+    "triggers": {
+      "pumpDayPct": 0.2,
+      "volumeSpikeMultiple": 2.5,
+      "dipFromLastBuyPct": 0.15
+    },
+    "deadVolumeSkip": true,
+    "cooldownHours": 12,
+    "dataSources": {
+      "preferFree": [
+        "dexscreener_api",
+        "geckoterminal_api",
+        "onchain_pool_reserves_via_base_rpc"
+      ],
+      "paidOptionalAsk": [
+        "0x_swap_quote",
+        "1inch_quote"
+      ],
+      "_rule": "Use free sources first. If the app wants a paid/keyed API for exact quotes, it ASKS the user before using it."
+    }
+  },
+  "general": {
+    "relative": "All weights/bands are percentages; app multiplies by each portfolio's real capital.",
+    "multiPortfolio": "Each portfolio independent, any mix, any size.",
+    "addingMoney": "New money enters at target weights; everything recomputes. No size limit anywhere.",
+    "appOwnsData": "Portfolios, capital, holdings, weights all live in the app (its own screens), NOT here."
+  },
+  "backtest": {
+    "horizon": "1-year rolling windows (53 samples, real 2021-2026 data)",
+    "config": "equal 25% BTC/ETH/SOL/XAUT; buy dips fast at -10% below target; trim slow monthly at +20% above target; skim 5% per +20% leg",
+    "typical_year": {
+      "strategyReturn": "+28%",
+      "hodlReturn": "+14%",
+      "yearsPositive": "68%",
+      "beatsHodl": "64%",
+      "medianMaxDD": "-37% (vs HODL -47%)",
+      "cashBankedPerYr": "~$2,000"
+    },
+    "caveat": "Holding wins the rare monster-bull year (uncapped). Strategy wins the typical year. Monthly gold interpolated; one cycle."
+  },
+  "horizon": "~1 year (optimized and reported on 1-year rolling windows)",
+  "safetyGuards": {
+    "_use": "Money-math safety layer — catches bad numbers before they reach the user.",
+    "fillJumpWarningPct": 0.30,
+    "_fillJump": "Flag when a settings save changes holdings or avg cost by >30% — typo guard.",
+    "avgCostVsPriceWarningPct": 0.50,
+    "_avgCost": "Flag when avg cost is >50% off the live price — sanity check.",
+    "signalValidation": "Every signal's dollar amount must be finite, non-negative, within spendable cash (buys), within holdings (sells), and within portfolio value. Failures are suppressed, logged, and surfaced.",
+    "auditLog": "Every signal (sent or suppressed) is durably logged with timestamp, portfolio, asset, action, amount, price, freshness, reason, and status."
+  }
+}

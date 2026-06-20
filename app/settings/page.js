@@ -3,9 +3,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { coinBadge } from '@/lib/coins';
 import BottomNav from '@/components/BottomNav';
+import { STRATEGY_CONFIG } from '@/lib/defaults';
+
+const FILL_JUMP_PCT = STRATEGY_CONFIG.safetyGuards.fillJumpWarningPct;
+const AVG_COST_VS_PRICE_PCT = STRATEGY_CONFIG.safetyGuards.avgCostVsPriceWarningPct;
 
 export default function Settings() {
   const [config, setConfig] = useState(null);
+  const [savedConfig, setSavedConfig] = useState(null); // snapshot for diff
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
@@ -14,6 +19,8 @@ export default function Settings() {
   const [activePid, setActivePid] = useState(null);
   const [activePortfolio, setActivePortfolio] = useState(null);
   const [pfSaving, setPfSaving] = useState(false);
+  const [prices, setPrices] = useState({});
+  const [confirm, setConfirm] = useState(null); // { changes, warnings }
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -23,6 +30,10 @@ export default function Settings() {
       setActivePid(pid);
       setActivePortfolio(pfs.find(p => p.id === pid) || pfs[0]);
     });
+    // Fetch live prices for avg-cost comparison
+    fetch('/api/status').then(r => r.json()).then(d => {
+      if (d.prices) setPrices(d.prices);
+    }).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -30,7 +41,11 @@ export default function Settings() {
     setLoading(true);
     fetch(`/api/config?portfolio=${activePid}`)
       .then((r) => r.json())
-      .then((c) => { setConfig(c); setLoading(false); })
+      .then((c) => {
+        setConfig(c);
+        setSavedConfig(JSON.parse(JSON.stringify(c)));
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
     const pf = portfolios.find(p => p.id === activePid);
     if (pf) setActivePortfolio(pf);
@@ -41,7 +56,84 @@ export default function Settings() {
     setTimeout(() => setToast(null), 2500);
   }
 
-  async function handleSave() {
+  // ── Fill-confirmation logic ──
+  function computeChanges() {
+    if (!config || !savedConfig) return { changes: [], warnings: [] };
+    const changes = [];
+    const warnings = [];
+
+    // Capital / cash changes
+    if (config.capital !== savedConfig.capital) {
+      changes.push(`Capital: $${savedConfig.capital} → $${config.capital}`);
+    }
+    if (config.cash !== savedConfig.cash) {
+      changes.push(`Cash: $${savedConfig.cash} → $${config.cash}`);
+    }
+
+    // Per-asset changes
+    const savedAssets = savedConfig.assets || [];
+    const newAssets = config.assets || [];
+    for (let i = 0; i < newAssets.length; i++) {
+      const prev = savedAssets[i] || {};
+      const next = newAssets[i];
+      const sym = next.symbol;
+
+      // Holdings change
+      if (next.holdingsUsd !== prev.holdingsUsd) {
+        const pct = prev.holdingsUsd > 0
+          ? ((next.holdingsUsd - prev.holdingsUsd) / prev.holdingsUsd * 100).toFixed(1)
+          : 'new';
+        changes.push(`${sym} Holdings: $${prev.holdingsUsd || 0} → $${next.holdingsUsd} (${pct}%)`);
+        if (prev.holdingsUsd > 0 && Math.abs(next.holdingsUsd - prev.holdingsUsd) / prev.holdingsUsd > FILL_JUMP_PCT) {
+          warnings.push(`${sym} holdings changed by ${pct}% — that's more than ${(FILL_JUMP_PCT * 100).toFixed(0)}%. Double-check this is correct.`);
+        }
+      }
+
+      // Avg cost change
+      if (next.avgCost !== prev.avgCost) {
+        const pct = prev.avgCost > 0
+          ? ((next.avgCost - prev.avgCost) / prev.avgCost * 100).toFixed(1)
+          : 'new';
+        changes.push(`${sym} Avg Cost: $${prev.avgCost || 0} → $${next.avgCost} (${pct}%)`);
+        if (prev.avgCost > 0 && Math.abs(next.avgCost - prev.avgCost) / prev.avgCost > FILL_JUMP_PCT) {
+          warnings.push(`${sym} avg cost changed by ${pct}% — that's more than ${(FILL_JUMP_PCT * 100).toFixed(0)}%. Double-check this is correct.`);
+        }
+        // Check avg cost vs live price
+        const livePrice = prices[sym];
+        if (livePrice && next.avgCost > 0) {
+          const drift = Math.abs(next.avgCost - livePrice) / livePrice;
+          if (drift > AVG_COST_VS_PRICE_PCT) {
+            warnings.push(`${sym} avg cost ($${next.avgCost}) is ${(drift * 100).toFixed(0)}% off the live price ($${livePrice.toLocaleString()}) — this looks unusual, double-check.`);
+          }
+        }
+      }
+
+      // Last action price change
+      if (next.lastActionPrice !== prev.lastActionPrice) {
+        changes.push(`${sym} Last Action Price: $${prev.lastActionPrice || 0} → $${next.lastActionPrice}`);
+      }
+
+      // Weight change
+      if (next.weight !== prev.weight) {
+        changes.push(`${sym} Weight: ${((prev.weight || 0) * 100).toFixed(0)}% → ${((next.weight || 0) * 100).toFixed(0)}%`);
+      }
+    }
+
+    return { changes, warnings };
+  }
+
+  function handleSaveClick() {
+    const { changes, warnings } = computeChanges();
+    if (changes.length === 0) {
+      showToast('No changes to save');
+      return;
+    }
+    // Always show confirmation dialog
+    setConfirm({ changes, warnings });
+  }
+
+  async function handleConfirmSave() {
+    setConfirm(null);
     setSaving(true);
     try {
       const res = await fetch(`/api/config?portfolio=${activePid}`, {
@@ -49,8 +141,10 @@ export default function Settings() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
-      if (res.ok) showToast('Settings saved');
-      else showToast('Save failed', 'error');
+      if (res.ok) {
+        showToast('Settings saved');
+        setSavedConfig(JSON.parse(JSON.stringify(config)));
+      } else showToast('Save failed', 'error');
     } catch {
       showToast('Save failed', 'error');
     } finally {
@@ -128,6 +222,42 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Confirmation Dialog */}
+      {confirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700/50 rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h3 className="text-sm font-bold text-zinc-200 mb-3">Confirm Changes</h3>
+            <div className="space-y-1.5 mb-4 max-h-48 overflow-y-auto">
+              {confirm.changes.map((c, i) => (
+                <p key={i} className="text-xs text-zinc-400 font-mono">{c}</p>
+              ))}
+            </div>
+            {confirm.warnings.length > 0 && (
+              <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <p className="text-xs font-semibold text-amber-400 mb-1.5">Unusual changes detected:</p>
+                {confirm.warnings.map((w, i) => (
+                  <p key={i} className="text-xs text-amber-300/80 mb-1">{w}</p>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirm(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/40 rounded-xl text-sm font-medium transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSave}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
+              >
+                {confirm.warnings.length > 0 ? 'Save Anyway' : 'Confirm Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-zinc-800/40 sticky top-0 z-10 bg-zinc-950/80 backdrop-blur-xl">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-3 flex justify-between items-center">
@@ -151,7 +281,7 @@ export default function Settings() {
             )}
           </div>
           <button
-            onClick={handleSave}
+            onClick={handleSaveClick}
             disabled={saving}
             className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl text-sm font-semibold transition-all cursor-pointer shadow-lg shadow-emerald-500/10"
           >
@@ -260,6 +390,9 @@ export default function Settings() {
             <p className="text-emerald-400/80">
               <strong className="text-emerald-400">Or just use Transactions:</strong>{' '}
               Log buys and sells in the Transactions page &mdash; everything is calculated automatically.
+            </p>
+            <p className="text-amber-400/60 text-xs mt-2">
+              All changes require confirmation before saving. Changes over {(FILL_JUMP_PCT * 100).toFixed(0)}% are flagged for review.
             </p>
           </div>
         </Section>
