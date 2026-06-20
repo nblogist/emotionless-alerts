@@ -490,11 +490,15 @@ export default function Dashboard() {
                           const gap = Math.max(targetVal - currentValue, 0);
                           const buyAmount = Math.min(gap, spendableCash);
                           const coinsToBuy = price > 0 ? buyAmount / price : 0;
-                          const deviationPct = (deviation * 100).toFixed(1);
+                          const deviationPct = Math.abs(deviation * 100).toFixed(1);
                           const newCoins = totalCoins + coinsToBuy;
                           const newHoldings = cc.holdingsUsd + buyAmount;
                           const newAvg = newCoins > 0 ? newHoldings / newCoins : price;
-                          return `Buy when ${coin} drifts >=10% below its target weight\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of ${fmt(capital)})\nCurrent value: ${fmt(currentValue)}\nDeviation: ${deviationPct}%${deviation <= -0.10 ? ' \u2014 BUY ZONE' : ' \u2014 within range'}\n\nIf buying now:\nSpend ${fmt(buyAmount)} to close the gap\nGet ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nSpendable cash left: ${fmt(Math.max(spendableCash - buyAmount, 0))}`;
+                          const statusLine = deviation <= -0.10 ? 'Buy signal active' : 'Within range, no action needed';
+                          const buySection = buyAmount > 0
+                            ? `\nSuggested buy:\nSpend ${fmt(buyAmount)} \u2192 get ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nCash remaining: ${fmt(Math.max(spendableCash - buyAmount, 0))}`
+                            : `\nNo spendable cash available.\nAdd funds or take profits to free up cash.`;
+                          return `${coin} is ${deviationPct}% ${deviation < 0 ? 'below' : 'above'} its target allocation. ${statusLine}.\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of your ${fmt(capital)} capital)\nCurrent value: ${fmt(currentValue)}\nGap: ${fmt(gap)}${gap > 0 ? buySection : ''}`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
                             nearBuy ? 'bg-blue-500/8 border border-blue-500/20' : 'bg-zinc-800/20 border border-transparent'
@@ -515,7 +519,8 @@ export default function Dashboard() {
                           const skimValue = currentValue * 0.05;
                           const skimCoins = price > 0 ? skimValue / price : 0;
                           const gainPct = (skimGain * 100).toFixed(1);
-                          return `Take profit: sell 5% when ${coin} rises >=20% from last action AND is above avg cost\n\nLast action: ${fmtPrice(lastAction)}\nTrigger price: ${fmtPrice(skimTriggerPrice)}\nAvg cost: ${fmtPrice(cc.avgCost)}\nPrice now: ${fmtPrice(price)} (${gainPct}% from last action)${nearSell ? ' \u2014 TAKE PROFIT' : ' \u2014 not there yet'}\n\nIf taking profit now:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5% of position)\nProceeds: ~${fmt(skimValue)}\nRemaining 95% keeps riding`;
+                          const statusLine = nearSell ? 'Triggered \u2014 consider taking profit' : `Not yet \u2014 needs ${fmtPrice(skimTriggerPrice)} (${gainPct}% of the way)`;
+                          return `Sell 5% of your ${coin} when the price rises 20%+ from your last trade and is above your avg cost.\n\nLast trade: ${fmtPrice(lastAction)}\nTrigger price: ${fmtPrice(skimTriggerPrice)}\nCurrent price: ${fmtPrice(price)}\nStatus: ${statusLine}\n\n${nearSell ? 'If you sell now' : 'When triggered'}:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5%) for ~${fmt(skimValue)}\nThe other 95% stays invested.`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/8 border border-orange-500/20' : 'bg-zinc-800/20 border border-transparent'
