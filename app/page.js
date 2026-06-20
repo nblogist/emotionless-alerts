@@ -255,7 +255,7 @@ export default function Dashboard() {
             const pnlUsd = currentValue - cc.holdingsUsd;
             const buyAt = cc.buyReference * (1 - (config?.buyBandPct || 0.07));
             const buyDropPct = cc.buyReference > 0 ? ((cc.buyReference - buyAt) / cc.buyReference * 100).toFixed(0) : 7;
-            const sellAt = cc.avgCost * (1 + (config?.firstSellPct || 0.4));
+            const sellAt = cc.avgCost * ((config?.trimMultiples || [2.0, 3.0, 4.0])[0]);
             const nearBuy = cc.buyReference > 0 && price <= buyAt;
             const nearSell = cc.avgCost > 0 && price >= sellAt;
 
@@ -334,14 +334,10 @@ export default function Dashboard() {
 
                       {cc.avgCost > 0 && (
                         <Tooltip block text={(() => {
-                          const sellPct = (config?.firstSellPct || 0.4) * 100;
-                          const stepPct = (config?.sellStepPct || 0.1) * 100;
                           const actualGain = cc.avgCost > 0 ? ((price - cc.avgCost) / cc.avgCost * 100).toFixed(1) : '—';
-                          const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
-                          const coinsToSell = totalCoins * 0.15;
-                          const sellValue = coinsToSell * price;
                           const notYet = price < sellAt;
-                          return `Sell 15% when ${coin} gains ${sellPct.toFixed(0)}% above your avg cost\n\nAvg cost: ${fmtPrice(cc.avgCost)}\nSell triggers at ${fmtPrice(sellAt)}\nPrice now: ${fmtPrice(price)} (${actualGain}% above avg)${notYet ? ' — not there yet' : ' — SELL NOW'}\n\nSell ${fmtCoinAmt(coinsToSell)} ${coin} → get ${fmt(sellValue)}\nNext sells at +${(sellPct + stepPct).toFixed(0)}%, +${(sellPct + stepPct * 2).toFixed(0)}%, +${(sellPct + stepPct * 3).toFixed(0)}%`;
+                          const trimPct = ((config?.sellTrimPct || 0.15) * 100).toFixed(0);
+                          return `Sell ${trimPct}% when ${coin} doubles (2x your avg cost)\n\nAvg cost: ${fmtPrice(cc.avgCost)}\nFirst sell at ${fmtPrice(sellAt)} (2x)\nPrice now: ${fmtPrice(price)} (${actualGain}% above avg)${notYet ? ' — not there yet' : ' — SELL NOW'}\n\n3 trims total: at 2x, 3x, and 4x your avg cost\nTrailing stop: if it drops 30% from peak, sell 25%`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
@@ -389,10 +385,10 @@ export default function Dashboard() {
                 active={status?.rules?.thesisBreak}
               />
             </Tooltip>
-            <Tooltip block text={`If BTC closes a week above $${(config?.upsideBreakUsd || 90000).toLocaleString()}, the downtrend is over. Deploy 40% of your remaining cash immediately.`}>
+            <Tooltip block text="If BTC closes a week above 1.2x the 200-week moving average, the downtrend is over. Deploy 40% of each coin's remaining cash immediately.">
               <CheckRow
                 label="Upside Breakout"
-                desc={`BTC close above $${(config?.upsideBreakUsd || 90000).toLocaleString()}`}
+                desc="BTC close above 1.2x 200-week MA"
                 active={status?.rules?.upsideBreak}
               />
             </Tooltip>

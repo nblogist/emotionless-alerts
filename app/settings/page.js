@@ -235,25 +235,18 @@ export default function Settings() {
             hint="Alert when price drops this % below buy reference"
           />
           <Field
-            label="First Sell Trigger"
-            value={config?.firstSellPct != null ? (config.firstSellPct * 100).toFixed(0) : ''}
-            onChange={(v) => update('firstSellPct', Number(v) / 100)}
+            label="Sell Trim %"
+            value={config?.sellTrimPct != null ? (config.sellTrimPct * 100).toFixed(0) : '15'}
+            onChange={(v) => update('sellTrimPct', Number(v) / 100)}
             suffix="%"
-            hint="First trim when price rises this % above avg cost"
+            hint="% of baseline to sell at each trim (2x, 3x, 4x avg cost)"
           />
           <Field
-            label="Sell Step"
-            value={config?.sellStepPct != null ? (config.sellStepPct * 100).toFixed(0) : ''}
-            onChange={(v) => update('sellStepPct', Number(v) / 100)}
-            suffix="%"
-            hint="Each subsequent sell trigger step"
-          />
-          <Field
-            label="Upside Break"
-            value={config?.upsideBreakUsd}
-            onChange={(v) => update('upsideBreakUsd', Number(v))}
+            label="Per-Coin Cap"
+            value={config?.perCoinCap}
+            onChange={(v) => update('perCoinCap', Number(v))}
             prefix="$"
-            hint="BTC weekly close above this triggers upside break alert"
+            hint="Max deployed per coin (buy rungs stop at this)"
           />
         </Section>
 

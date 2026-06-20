@@ -12,13 +12,13 @@ export async function GET(request) {
   const rules = {};
   for (const coin of coins) {
     rules[`buyBand:${coin}`] = !!(await store.get(`alerted:${pid}:buyBand:${coin}`));
-    rules[`sellTrigger:${coin}`] = ((await store.get(`sellLevel:${pid}:${coin}`)) || 0) > 0;
+    rules[`sellTrigger:${coin}`] = ((await store.get(`trimsDone:${pid}:${coin}`)) || 0) > 0 || !!(await store.get(`sellBaseline:${pid}:${coin}`));
     const dz = await store.get(`drawdownZone:${pid}:${coin}`);
     rules[`drawdown:${coin}`] = dz || null;
     rules[`floorConfirmed:${coin}`] = !!(await store.get(`alerted:${pid}:floorConfirmed:${coin}`));
   }
-  rules.thesisBreak = !!(await store.get(`alerted:${pid}:thesisBreak`));
-  rules.upsideBreak = !!(await store.get(`alerted:${pid}:upsideBreak`));
+  rules.thesisBreak = !!(await store.get(`thesisStop:${pid}`));
+  rules.upsideBreak = !!(await store.get(`upsideBreakDone:${pid}`));
 
   const btcCloses = (await store.get('weeklyCloses:BTC')) || [];
   const ma200 =

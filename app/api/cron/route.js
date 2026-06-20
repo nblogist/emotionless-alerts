@@ -28,6 +28,15 @@ export async function GET(request) {
       Object.keys(config.coins).forEach((c) => allCoins.add(c));
     }
 
+    // ISO week number helper
+    function isoWeekId(d) {
+      const tmp = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      tmp.setUTCDate(tmp.getUTCDate() + 4 - (tmp.getUTCDay() || 7));
+      const yearStart = new Date(Date.UTC(tmp.getUTCFullYear(), 0, 1));
+      const weekNo = Math.ceil(((tmp - yearStart) / 86400000 + 1) / 7);
+      return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+    }
+
     // Shared market data: weekly closes + cycle highs (same for all portfolios)
     for (const coin of allCoins) {
       let closes = await store.get(`weeklyCloses:${coin}`);
@@ -36,25 +45,33 @@ export async function GET(request) {
         try {
           closes = await fetchWeeklyCloses(coin);
           await store.set(`weeklyCloses:${coin}`, closes);
-          if (closes.length > 0) {
-            const historicalHigh = Math.max(...closes);
-            const current = (await store.get(`cycleHigh:${coin}`)) || 0;
-            if (historicalHigh > current) {
-              await store.set(`cycleHigh:${coin}`, historicalHigh);
-            }
-          }
         } catch (e) {
           console.error(`Backfill ${coin}:`, e.message);
           closes = [];
         }
       } else if (isMonday) {
-        const weekId = `${now.getUTCFullYear()}-W${now.getUTCMonth()}-${Math.floor(now.getUTCDate() / 7)}`;
+        const weekId = isoWeekId(now);
         const lastWeek = await store.get(`lastWeek:${coin}`);
         if (lastWeek !== weekId && prices[coin]) {
           closes.push(prices[coin]);
           if (closes.length > 210) closes.shift();
           await store.set(`weeklyCloses:${coin}`, closes);
           await store.set(`lastWeek:${coin}`, weekId);
+        }
+      }
+
+      // cycleHigh = trailing 365-day max (≈52 weekly closes), not all-time
+      if (closes.length > 0) {
+        const trailing365 = closes.slice(-52);
+        const high = Math.max(...trailing365);
+        await store.set(`cycleHigh:${coin}`, high);
+      }
+
+      // Also update cycleHigh with current live price if it's higher
+      if (prices[coin]) {
+        const currentHigh = (await store.get(`cycleHigh:${coin}`)) || 0;
+        if (prices[coin] > currentHigh) {
+          await store.set(`cycleHigh:${coin}`, prices[coin]);
         }
       }
     }
@@ -109,13 +126,22 @@ export async function GET(request) {
         if (!price) continue;
 
         let alert;
-        alert = await rules.checkBuyBand(coin, price, config, pf.id, pf.name);
-        if (alert) alerts.push(alert);
 
-        alert = await rules.checkSellTrigger(coin, price, config, pf.id, pf.name);
-        if (alert) alerts.push(alert);
+        // I4: max 1 buy + 1 sell per coin per run — track what fired
+        let buyFired = false;
+        let sellFired = false;
 
-        alert = await rules.checkDrawdownZone(coin, price, pf.id, pf.name);
+        if (!buyFired) {
+          alert = await rules.checkBuyBand(coin, price, config, pf.id, pf.name);
+          if (alert) { alerts.push(alert); buyFired = true; }
+        }
+
+        if (!sellFired) {
+          alert = await rules.checkSellTrigger(coin, price, config, pf.id, pf.name);
+          if (alert) { alerts.push(alert); sellFired = true; }
+        }
+
+        alert = await rules.checkDrawdownZone(coin, price, config, pf.id, pf.name);
         if (alert) alerts.push(alert);
 
         const closes = (await store.get(`weeklyCloses:${coin}`)) || [];
@@ -128,7 +154,7 @@ export async function GET(request) {
       alert = await rules.checkThesisBreak(btcCloses, ma200, pf.id, pf.name);
       if (alert) alerts.push(alert);
 
-      alert = await rules.checkUpsideBreak(btcCloses, config.upsideBreakUsd, config, pf.id, pf.name);
+      alert = await rules.checkUpsideBreak(btcCloses, ma200, config, pf.id, pf.name, prices);
       if (alert) alerts.push(alert);
 
       alert = await rules.checkMonthly(config, prices, pf.id, pf.name);
