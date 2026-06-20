@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import * as store from '@/lib/store';
-import { DEFAULT_CONFIG, DEFAULT_PORTFOLIOS } from '@/lib/defaults';
+import { DEFAULT_CONFIG, DEFAULT_PORTFOLIOS, STRATEGY_CONFIG } from '@/lib/defaults';
 import { getLivePrices, fetchWeeklyCloses } from '@/lib/prices';
 import * as rules from '@/lib/rules';
+import { addReason, formatSignalWithReason } from '@/lib/ai-wording';
+import { checkAquariSell } from '@/lib/aquari';
 import { sendTelegram } from '@/lib/telegram';
 import { sendEmail } from '@/lib/email';
 import { fetchAllRecentNews, fetchMarketNews, analyzeNewsWithAI, formatAINewsAlert, formatNewsAlert } from '@/lib/news';
+import { migrateConfig } from '@/lib/config-migrate';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,12 +23,16 @@ export async function GET(request) {
     const prices = await getLivePrices();
     const now = new Date();
     const isMonday = now.getUTCDay() === 1;
+    const isMonthly = now.getUTCDate() === 1;
+    const strat = STRATEGY_CONFIG;
 
     // Collect all coin symbols across all portfolios
     const allCoins = new Set();
     for (const pf of portfolios) {
-      const config = (await store.get(`config:${pf.id}`)) || DEFAULT_CONFIG;
-      Object.keys(config.coins).forEach((c) => allCoins.add(c));
+      const rawCfg = (await store.get(`config:${pf.id}`)) || DEFAULT_CONFIG;
+      const cfg = migrateConfig(rawCfg);
+      const assets = cfg.assets || [];
+      for (const a of assets) allCoins.add(a.symbol);
     }
 
     // ISO week number helper
@@ -37,10 +44,9 @@ export async function GET(request) {
       return `${tmp.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
     }
 
-    // Shared market data: weekly closes + cycle highs (same for all portfolios)
+    // Weekly close maintenance (shared across portfolios)
     for (const coin of allCoins) {
       let closes = await store.get(`weeklyCloses:${coin}`);
-
       if (!closes || !Array.isArray(closes) || closes.length === 0) {
         try {
           closes = await fetchWeeklyCloses(coin);
@@ -59,52 +65,27 @@ export async function GET(request) {
           await store.set(`lastWeek:${coin}`, weekId);
         }
       }
-
-      // cycleHigh = trailing 365-day max (≈52 weekly closes), not all-time
-      if (closes.length > 0) {
-        const trailing365 = closes.slice(-52);
-        const high = Math.max(...trailing365);
-        await store.set(`cycleHigh:${coin}`, high);
-      }
-
-      // Also update cycleHigh with current live price if it's higher
-      if (prices[coin]) {
-        const currentHigh = (await store.get(`cycleHigh:${coin}`)) || 0;
-        if (prices[coin] > currentHigh) {
-          await store.set(`cycleHigh:${coin}`, prices[coin]);
-        }
-      }
     }
 
-    // BTC shared data
+    // BTC shared data for crash brake
     const btcCloses = (await store.get('weeklyCloses:BTC')) || [];
     const ma200 =
       btcCloses.length >= 200
         ? btcCloses.slice(-200).reduce((a, b) => a + b, 0) / 200
         : null;
 
-    // News scanning — AI-powered with keyword fallback
+    // News scanning
     let newsAlert = null;
     let aiAnalysis = null;
     try {
       const allArticles = await fetchAllRecentNews();
-
       if (process.env.OPENROUTER_API_KEY && allArticles.length > 0) {
         aiAnalysis = await analyzeNewsWithAI(allArticles, [...allCoins]);
         if (aiAnalysis && aiAnalysis.length > 0) {
-          // Cache AI analysis for dashboard display
-          await store.set('aiNewsAnalysis', {
-            analysis: aiAnalysis,
-            timestamp: now.toISOString(),
-          });
+          await store.set('aiNewsAnalysis', { analysis: aiAnalysis, timestamp: now.toISOString() });
           newsAlert = formatAINewsAlert(aiAnalysis);
-          console.log(`AI news scan: ${aiAnalysis.length} relevant headline(s)`);
-        } else {
-          console.log('AI news scan: no material headlines');
         }
       }
-
-      // Fallback to keyword filter if AI unavailable or returned nothing
       if (!newsAlert) {
         const keywordArticles = await fetchMarketNews();
         newsAlert = formatNewsAlert(keywordArticles);
@@ -115,86 +96,128 @@ export async function GET(request) {
 
     let totalAlerts = 0;
 
-    // Run rules for each portfolio
+    // ── Run rules for each portfolio ──
     for (const pf of portfolios) {
-      const config = (await store.get(`config:${pf.id}`)) || DEFAULT_CONFIG;
-      const coins = Object.keys(config.coins);
+      const rawConfig = (await store.get(`config:${pf.id}`)) || DEFAULT_CONFIG;
+      const config = migrateConfig(rawConfig);
       const alerts = [];
 
-      for (const coin of coins) {
-        const price = prices[coin];
-        if (!price) continue;
+      // Build portfolio context from config
+      const assets = config.assets || [];
+      const capital = config.capital || 0;
+      const cash = config.cash || 0;
 
-        let alert;
-
-        // I4: max 1 buy + 1 sell per coin per run — track what fired
-        let buyFired = false;
-        let sellFired = false;
-
-        if (!buyFired) {
-          alert = await rules.checkBuyBand(coin, price, config, pf.id, pf.name);
-          if (alert) { alerts.push(alert); buyFired = true; }
+      // Compute portfolio value (sum of all asset current values + cash)
+      let portfolioValue = cash;
+      for (const asset of assets) {
+        const p = prices[asset.symbol];
+        if (p && asset.avgCost > 0) {
+          asset.currentValue = (asset.holdingsUsd / asset.avgCost) * p;
+        } else {
+          asset.currentValue = asset.holdingsUsd || 0;
         }
-
-        if (!sellFired) {
-          alert = await rules.checkSellTrigger(coin, price, config, pf.id, pf.name);
-          if (alert) { alerts.push(alert); sellFired = true; }
-        }
-
-        alert = await rules.checkDrawdownZone(coin, price, config, pf.id, pf.name);
-        if (alert) alerts.push(alert);
-
-        const closes = (await store.get(`weeklyCloses:${coin}`)) || [];
-        alert = await rules.checkFloorConfirmed(coin, closes, config, pf.id, pf.name);
-        if (alert) alerts.push(alert);
+        portfolioValue += asset.currentValue;
       }
 
-      // BTC-only checks (per portfolio — different thresholds/cash amounts)
-      let alert;
-      alert = await rules.checkThesisBreak(btcCloses, ma200, pf.id, pf.name);
-      if (alert) alerts.push(alert);
+      // Crash brake weight shift — if active, halve crypto targets, boost gold
+      const isCrashBrakeActive = await store.get(`crashBrakeActive:${pf.id}`);
+      const effectiveAssets = isCrashBrakeActive ? rules.applyCrashBrakeWeights(assets) : assets;
 
-      alert = await rules.checkUpsideBreak(btcCloses, ma200, config, pf.id, pf.name, prices);
-      if (alert) alerts.push(alert);
+      const portfolio = {
+        capital,
+        cash,
+        portfolioValue,
+        assetCount: effectiveAssets.filter(a => a.class === 'liquid').length,
+        assets: effectiveAssets,
+      };
 
-      alert = await rules.checkMonthly(config, prices, pf.id, pf.name);
-      if (alert) alerts.push(alert);
+      // Per-asset rules (liquid basket only — AQUARI handled separately in Batch 3)
+      for (const asset of effectiveAssets) {
+        if (asset.class !== 'liquid') continue;
+        const price = prices[asset.symbol];
+        if (!price) continue;
 
-      // Add news to each portfolio's alerts
+        // Clear buy-dip alert if recovered
+        await rules.clearBuyDipIfRecovered(asset, price, portfolio, pf.id);
+
+        // 1. BUY THE DIP — continuous, any time
+        const buyResult = await rules.checkBuyDip(asset, price, portfolio, pf.id, pf.name);
+        if (buyResult) {
+          await addReason(buyResult);
+          alerts.push(formatSignalWithReason(buyResult));
+        }
+
+        // 2. SKIM ON A POP — continuous
+        const skimResult = await rules.checkSkim(asset, price, pf.id, pf.name);
+        if (skimResult) {
+          await addReason(skimResult);
+          alerts.push(formatSignalWithReason(skimResult));
+        }
+
+        // 3. BIG TRIM — monthly only
+        if (isMonthly) {
+          const trimResult = await rules.checkBigTrim(asset, price, portfolio, pf.id, pf.name);
+          if (trimResult) {
+            await addReason(trimResult);
+            alerts.push(formatSignalWithReason(trimResult));
+          }
+        }
+      }
+
+      // Microcap rules (AQUARI — liquidity-aware sell calculator, separate sleeve)
+      for (const asset of effectiveAssets) {
+        if (asset.class !== 'microcap') continue;
+        try {
+          const mcResult = await checkAquariSell(asset, prices, pf.id, pf.name, isMonthly);
+          if (mcResult) {
+            await addReason(mcResult);
+            alerts.push(formatSignalWithReason(mcResult));
+          }
+        } catch (e) {
+          console.error(`Microcap ${asset.symbol}:`, e.message);
+        }
+      }
+
+      // Crash brake (shared BTC signal, per-portfolio flag)
+      const crashBrakeEnabled = strat.crashBrake.enabled;
+      const crashResult = await rules.checkCrashBrake(btcCloses, ma200, pf.id, pf.name, crashBrakeEnabled);
+      if (crashResult) {
+        await addReason(crashResult);
+        alerts.push(formatSignalWithReason(crashResult));
+      }
+
+      // Monthly summary
+      const monthlyResult = await rules.checkMonthly(portfolio, prices, pf.id, pf.name);
+      if (monthlyResult) {
+        await addReason(monthlyResult);
+        alerts.push(formatSignalWithReason(monthlyResult));
+      }
+
+      // News
       if (newsAlert) alerts.push(newsAlert);
 
-      // Send alerts to this portfolio's channels
+      // Send alerts
       if (alerts.length > 0) {
         const message = alerts.join('\n\n');
-
-        // Telegram — send to this portfolio's chat ID
         const chatIds = (pf.telegramChatId || '').split(',').map((id) => id.trim()).filter(Boolean);
         for (const cid of chatIds) {
           await sendTelegram(cid, message);
         }
-
-        // Email — send to this portfolio's email
         if (pf.alertEmail) {
-          await sendEmail(
-            `[${pf.name}] ${alerts.length} rule(s) fired`,
-            message,
-            [pf.alertEmail]
-          );
+          await sendEmail(`[${pf.name}] ${alerts.length} signal(s)`, message, [pf.alertEmail]);
         }
-
         for (const a of alerts) {
           await store.lpush('alertHistory', { message: a, time: now.toISOString(), portfolio: pf.id });
         }
-
         totalAlerts += alerts.length;
-        console.log(`[${pf.name}] Sent ${alerts.length} alert(s)`);
+        console.log(`[${pf.name}] Sent ${alerts.length} signal(s)`);
       } else {
-        console.log(`[${pf.name}] No rules fired.`);
+        console.log(`[${pf.name}] No signals.`);
       }
     }
 
     if (totalAlerts === 0) {
-      console.log('No rules fired across all portfolios. Silence is correct.');
+      console.log('No signals across all portfolios.');
     }
 
     // Activity log
@@ -205,7 +228,7 @@ export async function GET(request) {
       prices: Object.fromEntries([...allCoins].map((c) => [c, prices[c] || null])),
       aiNews: aiAnalysis ? aiAnalysis.length : 0,
       summary: totalAlerts > 0
-        ? `${totalAlerts} alert(s) across ${portfolios.length} portfolio(s)`
+        ? `${totalAlerts} signal(s) across ${portfolios.length} portfolio(s)`
         : `All quiet across ${portfolios.length} portfolio(s)`,
     };
     await store.lpush('activityLog', logEntry);

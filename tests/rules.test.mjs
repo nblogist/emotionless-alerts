@@ -3,258 +3,405 @@ import assert from 'node:assert/strict';
 import * as rules from '../lib/rules.js';
 import * as mockStore from './mock-store.js';
 
-// --- Helpers ---
+// ── Helpers ──
 
-function makeConfig(overrides = {}) {
+function makePortfolio(overrides = {}) {
   const base = {
-    totalCapital: 15000,
-    perCoinCap: 5000,
-    powderRemaining: 7500,
-    reserveRemaining: 1500,
-    buyBandPct: 0.07,
-    rungSizes: [400, 600, 700, 800],
-    sellTrimPct: 0.15,
-    trimMultiples: [2.0, 3.0, 4.0],
-    trailingStopPct: 0.30,
-    trailingStopSellPct: 0.25,
-    upsideBreakMult: 1.20,
-    upsideDeployPct: 0.40,
-    drawdownZones: [-0.20, -0.35, -0.50],
-    coins: {
-      BTC: { holdingsUsd: 2000, avgCost: 64000, buyReference: 64000 },
-    },
+    capital: 10000,
+    cash: 3000,
+    portfolioValue: 10000,
+    assetCount: 4,
+    assets: [
+      { symbol: 'BTC',  class: 'liquid', weight: 0.25, holdingsUsd: 1750, avgCost: 70000, lastActionPrice: 70000, currentValue: 1750 },
+      { symbol: 'ETH',  class: 'liquid', weight: 0.25, holdingsUsd: 1750, avgCost: 2600, lastActionPrice: 2600, currentValue: 1750 },
+      { symbol: 'SOL',  class: 'liquid', weight: 0.25, holdingsUsd: 1750, avgCost: 72, lastActionPrice: 72, currentValue: 1750 },
+      { symbol: 'XAUT', class: 'liquid', weight: 0.25, holdingsUsd: 1750, avgCost: 2700, lastActionPrice: 2700, currentValue: 1750 },
+    ],
+  };
+  return { ...base, ...overrides };
+}
+
+function makeAsset(overrides = {}) {
+  return {
+    symbol: 'BTC',
+    class: 'liquid',
+    weight: 0.25,
+    holdingsUsd: 1750,
+    avgCost: 70000,
+    lastActionPrice: 70000,
+    currentValue: 1750,
     ...overrides,
   };
-  // Deep-merge coins if provided
-  if (overrides.coins) base.coins = { ...overrides.coins };
-  return base;
 }
 
 const PID = 'test';
 const PNAME = 'Test';
 
-// --- Reset store between every test ---
+// ══════════════════════════════════════════════════════════════
+// §F Verification Checklist
+// ══════════════════════════════════════════════════════════════
 
-beforeEach(() => mockStore._clear());
+describe('§F Checklist — Liquid Basket', () => {
+  beforeEach(() => mockStore._clear());
 
-// ============================================================
-// §4 Verification checklist
-// ============================================================
+  // §F.1: BUY fires at exactly 10% below target; size brings asset back to target; shown in $
+  test('BUY fires at 10% below target; size = gap to target', async () => {
+    // Target = 0.25 × 10000 = 2500. Current = 2200 → 12% below.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2200 });
+    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(result, 'Should fire');
+    assert.equal(result.type, 'BUY_DIP');
+    // Gap = 2500 - 2200 = 300
+    assert.equal(result.buyAmountUsd, 300, 'Buy amount = gap to target');
+    assert.ok(result.message.includes('$'), 'Shows dollar amount');
+  });
 
-describe('§4 Checklist', () => {
+  // §F.2: No buy fires when asset is within 10% of target
+  test('No buy when asset is within 10% of target', async () => {
+    // Target = 2500. Current = 2300 → only 8% below.
+    const portfolio = makePortfolio();
+    const asset = makeAsset({ currentValue: 2300 });
+    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.equal(result, null, 'Should not fire within 10%');
+  });
 
-  // 1. Buy rung 1 alerts at price = buyReference × 0.93, amount $400
-  test('Buy rung 1 alerts at buyReference × 0.93, amount $400', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 0, avgCost: 64000, buyReference: 64000 } },
+  // Exact boundary: exactly 10% below fires
+  test('BUY fires at exactly 10% below target', async () => {
+    // Target = 2500. Current = 2250 → exactly 10% below.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2250 });
+    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(result, 'Should fire at exactly 10%');
+    assert.equal(result.buyAmountUsd, 250, 'Gap = 2500 - 2250 = 250');
+  });
+
+  // §F.3: SKIM fires at +20% from last action & above cost; sells 5%; resets reference
+  test('SKIM fires at +20% from last action & above cost; sells 5%', async () => {
+    // avgCost = 100, lastActionPrice = 100, price = 121 → +21% from last action, above cost
+    const asset = makeAsset({
+      symbol: 'SOL', avgCost: 100, lastActionPrice: 100,
+      holdingsUsd: 1000, currentValue: 1210,
     });
-    const price = 64000 * (1 - 0.07); // at threshold (same formula as code)
-    const result = await rules.checkBuyBand('BTC', price, config, PID, PNAME);
-    assert.ok(result !== null, 'Rung 1 should fire');
-    assert.ok(result.includes('Rung 1'), 'Should say Rung 1');
-    assert.ok(result.includes('$400'), 'Amount should be $400');
+    const result = await rules.checkSkim(asset, 121, PID, PNAME);
+    assert.ok(result, 'Should fire');
+    assert.equal(result.type, 'SKIM');
+    // totalCoins = 1000/100 = 10. 5% = 0.5 coins.
+    assert.ok(Math.abs(result.skimCoins - 0.5) < 0.001, 'Sells 5% of position');
+    assert.ok(result.message.includes('$'), 'Shows dollar amount');
   });
 
-  // 2. Rungs escalate 400→600→700→800, then STOP at $5k deployed (I2)
-  test('Rungs escalate 400→600→700→800 then stop', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 0, avgCost: 64000, buyReference: 64000 } },
+  // §F.4: SKIM does NOT fire below cost or below +20%
+  test('SKIM does NOT fire below cost', async () => {
+    const asset = makeAsset({ avgCost: 100, lastActionPrice: 100 });
+    const result = await rules.checkSkim(asset, 90, PID, PNAME);
+    assert.equal(result, null, 'Should not fire below cost');
+  });
+
+  test('SKIM does NOT fire below +20%', async () => {
+    const asset = makeAsset({ avgCost: 100, lastActionPrice: 100 });
+    const result = await rules.checkSkim(asset, 115, PID, PNAME);
+    assert.equal(result, null, 'Should not fire at +15%');
+  });
+
+  // §F.5: BIG TRIM fires only on monthly check and only when >20% above target
+  test('BIG TRIM fires when >20% above target', async () => {
+    // Target = 2500. Current = 3100 → 24% above.
+    const portfolio = makePortfolio();
+    const asset = makeAsset({ currentValue: 3100, holdingsUsd: 2000, avgCost: 60000 });
+    const result = await rules.checkBigTrim(asset, 75000, portfolio, PID, PNAME);
+    assert.ok(result, 'Should fire');
+    assert.equal(result.type, 'BIG_TRIM');
+    // Excess = 3100 - 2500 = 600
+    assert.ok(Math.abs(result.trimValueUsd - 600) < 0.01, 'Trims excess back to target');
+  });
+
+  test('BIG TRIM does NOT fire when <20% above target', async () => {
+    // Target = 2500. Current = 2900 → 16% above.
+    const portfolio = makePortfolio();
+    const asset = makeAsset({ currentValue: 2900, holdingsUsd: 2000, avgCost: 60000 });
+    const result = await rules.checkBigTrim(asset, 75000, portfolio, PID, PNAME);
+    assert.equal(result, null, 'Should not fire below 20%');
+  });
+
+  // §F.6: Gold is a full basket member — buys/sells like any other asset
+  test('XAUT (gold) buys and sells like any other liquid asset', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const goldAsset = makeAsset({
+      symbol: 'XAUT', weight: 0.25, currentValue: 2000,
+      holdingsUsd: 2000, avgCost: 2700, lastActionPrice: 2700,
     });
-    const price = 64000 * 0.92;
-    const expected = [400, 600, 700, 800];
+    // Target = 2500, current = 2000 → 20% below → buy fires
+    const buyResult = await rules.checkBuyDip(goldAsset, 2600, portfolio, PID, PNAME);
+    assert.ok(buyResult, 'Gold buy should fire');
+    assert.equal(buyResult.buyAmountUsd, 500, 'Gold buys same as crypto');
 
-    for (let i = 0; i < 4; i++) {
-      await mockStore.set(`alerted:${PID}:buyBand:BTC`, false);
-      const r = await rules.checkBuyBand('BTC', price, config, PID, PNAME);
-      assert.ok(r !== null, `Rung ${i + 1} should fire`);
-      assert.ok(r.includes(`Rung ${i + 1}`), `Should say Rung ${i + 1}`);
-      assert.ok(r.includes(`$${expected[i]}`), `Amount should be $${expected[i]}`);
-      config.coins.BTC.holdingsUsd += expected[i];
-    }
-
-    // 5th call — rungs exhausted
-    await mockStore.set(`alerted:${PID}:buyBand:BTC`, false);
-    const r = await rules.checkBuyBand('BTC', price, config, PID, PNAME);
-    assert.strictEqual(r, null, 'No rung after all 4 filled');
-  });
-
-  // 3. Two triggers in one run → only ONE rung fires (I4)
-  test('I4: max 1 buy alert per coin per run', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 0, avgCost: 64000, buyReference: 64000 } },
+    // Gold skim — up 20% from last action
+    mockStore._clear();
+    const goldSkim = makeAsset({
+      symbol: 'XAUT', avgCost: 2000, lastActionPrice: 2000,
+      holdingsUsd: 5000, currentValue: 6000,
     });
-    const price = 64000 * 0.92;
-
-    const r1 = await rules.checkBuyBand('BTC', price, config, PID, PNAME);
-    assert.ok(r1 !== null, 'First call fires');
-
-    const r2 = await rules.checkBuyBand('BTC', price, config, PID, PNAME);
-    assert.strictEqual(r2, null, 'Second call in same run must not fire');
+    const skimResult = await rules.checkSkim(goldSkim, 2400, PID, PNAME);
+    assert.ok(skimResult, 'Gold skim should fire');
+    assert.equal(skimResult.type, 'SKIM');
   });
 
-  // 4. dd = −40% → buy ladder PAUSES; no rung fires (I5)
-  test('I5: paused in −35% zone, buy rung blocked', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 0, avgCost: 64000, buyReference: 64000 } },
+  // §F.7: Sizes scale with capital; nothing hardcoded; change capital → all $ recompute
+  test('Sizes scale with capital — doubling capital doubles buy amount', async () => {
+    // P = 10000: target = 2500, current = 2000 → buy 500
+    const pSmall = makePortfolio({ capital: 10000, cash: 3000, portfolioValue: 10000 });
+    const aSmall = makeAsset({ currentValue: 2000 });
+    const rSmall = await rules.checkBuyDip(aSmall, 65000, pSmall, 'p1', PNAME);
+    assert.ok(rSmall);
+    assert.equal(rSmall.buyAmountUsd, 500);
+
+    // P = 20000: target = 5000, current = 4000 → buy 1000
+    mockStore._clear();
+    const pLarge = makePortfolio({ capital: 20000, cash: 6000, portfolioValue: 20000 });
+    const aLarge = makeAsset({ currentValue: 4000 });
+    const rLarge = await rules.checkBuyDip(aLarge, 65000, pLarge, 'p2', PNAME);
+    assert.ok(rLarge);
+    assert.equal(rLarge.buyAmountUsd, 1000);
+    assert.equal(rLarge.buyAmountUsd, rSmall.buyAmountUsd * 2, 'Double capital → double buy');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// 10% Cash Floor tests
+// ══════════════════════════════════════════════════════════════
+
+describe('10% Cash Floor', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('Buy is capped when it would breach the 10% cash floor', async () => {
+    // Portfolio value = 10000, floor = 1000. Cash = 1200. Spendable = 200.
+    // Target = 2500, current = 2000 → ideal gap = 500. But only 200 spendable.
+    const portfolio = makePortfolio({ cash: 1200, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(result, 'Should still fire (capped)');
+    assert.equal(result.buyAmountUsd, 200, 'Capped at spendable above floor');
+    assert.equal(result.capped, true, 'Should flag as capped');
+    assert.equal(result.idealGapUsd, 500, 'Shows ideal gap');
+  });
+
+  test('Buy returns 0 when cash is exactly at the floor', async () => {
+    // Portfolio value = 10000, floor = 1000. Cash = 1000. Spendable = 0.
+    const portfolio = makePortfolio({ cash: 1000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(result, 'Should fire (with 0 amount)');
+    assert.equal(result.buyAmountUsd, 0, 'Zero spendable');
+    assert.equal(result.capped, true);
+  });
+
+  test('Buy is NOT capped when cash is well above the floor', async () => {
+    // Portfolio value = 10000, floor = 1000. Cash = 3000. Spendable = 2000.
+    // Gap = 500 < 2000 → not capped.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(result);
+    assert.equal(result.buyAmountUsd, 500);
+    assert.equal(result.capped, false, 'Should not be capped');
+  });
+
+  test('getSpendableCash returns 0 when cash is below floor', async () => {
+    const portfolio = { cash: 500, portfolioValue: 10000 };
+    assert.equal(rules.getSpendableCash(portfolio), 0);
+  });
+
+  test('getSpendableCash returns cash - floor when above', async () => {
+    const portfolio = { cash: 3000, portfolioValue: 10000 };
+    assert.equal(rules.getSpendableCash(portfolio), 2000);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Transition-only alerts (I6)
+// ══════════════════════════════════════════════════════════════
+
+describe('Transition-only alerts (I6)', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('BUY DIP does not re-alert a standing condition', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+
+    const r1 = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(r1, 'First fires');
+
+    const r2 = await rules.checkBuyDip(asset, 64000, portfolio, PID, PNAME);
+    assert.equal(r2, null, 'Same condition should not re-alert');
+  });
+
+  test('BUY DIP re-arms after recovery', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+
+    const r1 = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(r1, 'First fires');
+
+    // Recover above threshold
+    const recovered = makeAsset({ currentValue: 2500 });
+    await rules.clearBuyDipIfRecovered(recovered, 70000, portfolio, PID);
+
+    // Drop again
+    const r2 = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(r2, 'Should fire again after recovery');
+  });
+
+  test('SKIM does not re-alert same reference', async () => {
+    const asset = makeAsset({
+      avgCost: 100, lastActionPrice: 100, holdingsUsd: 1000,
     });
-    await mockStore.set(`drawdownZone:${PID}:BTC`, '35');
-    const price = 64000 * 0.92;
-    const r = await rules.checkBuyBand('BTC', price, config, PID, PNAME);
-    assert.strictEqual(r, null, 'Buy must not fire in pause zone');
+    const r1 = await rules.checkSkim(asset, 121, PID, PNAME);
+    assert.ok(r1, 'First fires');
+
+    const r2 = await rules.checkSkim(asset, 125, PID, PNAME);
+    assert.equal(r2, null, 'Same reference should not re-alert');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Crash Brake — full §A.5 coverage
+// ══════════════════════════════════════════════════════════════
+
+describe('Crash Brake (§A.5)', () => {
+  beforeEach(() => mockStore._clear());
+
+  // §A.5.1: Does NOT trigger on just 1 close below MA
+  test('Does NOT trigger on 1 close below MA', async () => {
+    // Only the last close is below — first is above
+    const r = await rules.checkCrashBrake([51000, 48000], 50000, PID, PNAME, true);
+    assert.equal(r, null, 'Needs 2 consecutive closes below');
   });
 
-  // 5. Reserve fires only after 2 weekly closes above drawdown low (I6)
-  test('I6: floor confirmed fires only in crash zone with 2 closes above low', async () => {
-    const config = makeConfig();
-
-    // Not in 35/50 zone → should not fire
-    const closes = [100, 80, 60, 50, 55, 56];
-    const r1 = await rules.checkFloorConfirmed('BTC', closes, config, PID, PNAME);
-    assert.strictEqual(r1, null, 'Should not fire outside crash zone');
-
-    // In 50 zone → should fire (last 2 closes above min)
-    await mockStore.set(`drawdownZone:${PID}:BTC`, '50');
-    const r2 = await rules.checkFloorConfirmed('BTC', closes, config, PID, PNAME);
-    assert.ok(r2 !== null, 'Floor confirmed should fire in 50 zone');
-    assert.ok(r2.includes('FLOOR CONFIRMED'));
-
-    // Does not re-fire
-    const r3 = await rules.checkFloorConfirmed('BTC', closes, config, PID, PNAME);
-    assert.strictEqual(r3, null, 'Should not re-alert floor confirmed');
+  // §A.5.2: Triggers on 2 consecutive closes below 200wMA
+  test('Triggers de-risk on 2 consecutive closes below 200wMA', async () => {
+    const r = await rules.checkCrashBrake([49000, 48000], 50000, PID, PNAME, true);
+    assert.ok(r);
+    assert.equal(r.type, 'CRASH_BRAKE');
+    assert.equal(r.action, 'deRisk');
   });
 
-  // 6. Sell baseline locks at avgCost×2.0; trims fire at ×2.0, ×3.0, ×4.0, 15% each
-  test('Sell baseline locks at 2x; trims at 2x / 3x / 4x, 15% each', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 2000, avgCost: 100, buyReference: 100 } },
-    });
-
-    // Price at 2x → baseline locks + trim 1
-    const r1 = await rules.checkSellTrigger('BTC', 200, config, PID, PNAME);
-    assert.ok(r1 !== null, 'Trim 1 should fire at 2x');
-    assert.ok(r1.includes('Trim 1'));
-    assert.ok(r1.includes('15%'));
-    const baseline = await mockStore.get(`sellBaseline:${PID}:BTC`);
-    assert.strictEqual(baseline, 20, 'Baseline should lock at 20 units (2000/100)');
-
-    // Trim 2 at 3x
-    const r2 = await rules.checkSellTrigger('BTC', 300, config, PID, PNAME);
-    assert.ok(r2 !== null, 'Trim 2 should fire at 3x');
-    assert.ok(r2.includes('Trim 2'));
-
-    // Trim 3 at 4x
-    const r3 = await rules.checkSellTrigger('BTC', 400, config, PID, PNAME);
-    assert.ok(r3 !== null, 'Trim 3 should fire at 4x');
-    assert.ok(r3.includes('Trim 3'));
+  // §A.5.3: Weight shifts — crypto 25%→12.5%, gold gets +18.75%, total weights = 81.25% (rest → cash)
+  test('applyCrashBrakeWeights: crypto halves, gold boosted, total = 81.25%', () => {
+    const assets = [
+      { symbol: 'BTC',  class: 'liquid', weight: 0.25 },
+      { symbol: 'ETH',  class: 'liquid', weight: 0.25 },
+      { symbol: 'SOL',  class: 'liquid', weight: 0.25 },
+      { symbol: 'XAUT', class: 'liquid', weight: 0.25 },
+    ];
+    const shifted = rules.applyCrashBrakeWeights(assets);
+    // Each crypto: 0.25 → 0.125
+    assert.equal(shifted.find(a => a.symbol === 'BTC').weight, 0.125);
+    assert.equal(shifted.find(a => a.symbol === 'ETH').weight, 0.125);
+    assert.equal(shifted.find(a => a.symbol === 'SOL').weight, 0.125);
+    // Gold: 0.25 + (3 × 0.125 / 2) = 0.25 + 0.1875 = 0.4375
+    const goldWeight = shifted.find(a => a.symbol === 'XAUT').weight;
+    assert.ok(Math.abs(goldWeight - 0.4375) < 1e-10, `Gold should be 0.4375, got ${goldWeight}`);
+    // Total: 0.125 × 3 + 0.4375 = 0.8125 (81.25%), the rest is implicit cash
+    const total = shifted.reduce((s, a) => s + a.weight, 0);
+    assert.ok(Math.abs(total - 0.8125) < 1e-10, `Total should be 0.8125, got ${total}`);
   });
 
-  // 7. After 3 trims, no further trim fires
-  test('After 3 trims, no further trim fires', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 2000, avgCost: 100, buyReference: 100 } },
-    });
-    await mockStore.set(`sellBaseline:${PID}:BTC`, 20);
-    await mockStore.set(`trimsDone:${PID}:BTC`, 3);
-    await mockStore.set(`peakSinceGreen:${PID}:BTC`, 500); // keep peak = price so TS won't fire
-
-    const r = await rules.checkSellTrigger('BTC', 500, config, PID, PNAME);
-    assert.strictEqual(r, null, 'No trim should fire after 3 done');
+  // §A.5.4: Re-risks on first weekly close back above 200wMA
+  test('Re-risks on first close above 200wMA', async () => {
+    await rules.checkCrashBrake([49000, 48000], 50000, PID, PNAME, true);
+    const r = await rules.checkCrashBrake([48000, 51000], 50000, PID, PNAME, true);
+    assert.ok(r);
+    assert.equal(r.action, 'reRisk');
   });
 
-  // 8. Trailing stop sells 25% at price ≤ peak×0.70, resets peak, can fire again (I7)
-  test('I7: trailing stop at peak×0.70, sells 25%, resets peak, re-fires', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 2000, avgCost: 100, buyReference: 100 } },
-    });
-    await mockStore.set(`sellBaseline:${PID}:BTC`, 20);
-    await mockStore.set(`trimsDone:${PID}:BTC`, 3);
-    await mockStore.set(`peakSinceGreen:${PID}:BTC`, 1000);
-
-    // Drop to peak × 0.70 = 700
-    const r1 = await rules.checkSellTrigger('BTC', 700, config, PID, PNAME);
-    assert.ok(r1 !== null, 'Trailing stop should fire');
-    assert.ok(r1.includes('TRAILING STOP'));
-    assert.ok(r1.includes('25%'));
-
-    // Peak should reset to 700
-    const peak = await mockStore.get(`peakSinceGreen:${PID}:BTC`);
-    assert.strictEqual(peak, 700, 'Peak should reset to current price');
-
-    // Can fire again at 700 × 0.70 = 490 (use 489 to avoid fp boundary)
-    const r2 = await rules.checkSellTrigger('BTC', 489, config, PID, PNAME);
-    assert.ok(r2 !== null, 'Trailing stop should re-fire at new threshold');
-    assert.ok(r2.includes('TRAILING STOP'));
+  // §A.5.5: Default OFF — disabled portfolio never de-risks
+  test('Disabled portfolio never de-risks regardless of BTC', async () => {
+    const r = await rules.checkCrashBrake([40000, 30000], 50000, PID, PNAME, false);
+    assert.equal(r, null, 'Should do nothing when disabled');
   });
 
-  // 9. Thesis break at 2 weekly closes below 200wMA; re-entry at 1 close above
-  test('Thesis break fires at 2 closes below MA; resumes at 1 above', async () => {
-    const ma200 = 50000;
-
-    // 2 closes below
-    const r1 = await rules.checkThesisBreak([49000, 48000], ma200, PID, PNAME);
-    assert.ok(r1 !== null, 'Thesis break should fire');
-    assert.ok(r1.includes('THESIS BREAK'));
-    assert.strictEqual(await mockStore.get(`thesisStop:${PID}`), true);
-
-    // 1 close above → resume
-    const r2 = await rules.checkThesisBreak([48000, 51000], ma200, PID, PNAME);
-    assert.ok(r2 !== null, 'Resume alert should fire');
-    assert.ok(r2.includes('RESUMED'));
-    assert.strictEqual(await mockStore.get(`thesisStop:${PID}`), false);
+  // §A.5.6: Buy uses shifted target when brake is ON
+  test('Buy uses shifted targets when brake is active', async () => {
+    // Normal target = 0.25 × 10000 = 2500. Shifted target = 0.125 × 10000 = 1250.
+    // Asset currentValue = 2000 → above shifted target → no buy.
+    const assets = [
+      { symbol: 'BTC',  class: 'liquid', weight: 0.25, holdingsUsd: 2000, avgCost: 70000, currentValue: 2000 },
+      { symbol: 'XAUT', class: 'liquid', weight: 0.25, holdingsUsd: 2000, avgCost: 2700, currentValue: 2000 },
+    ];
+    const shifted = rules.applyCrashBrakeWeights(assets);
+    const portfolio = { capital: 10000, cash: 3000, portfolioValue: 10000, assetCount: 2, assets: shifted };
+    const btc = shifted.find(a => a.symbol === 'BTC');
+    // Shifted target for BTC = 0.125 × 10000 = 1250. currentValue = 2000 → 60% above → no buy
+    const buyResult = await rules.checkBuyDip(btc, 70000, portfolio, PID, PNAME);
+    assert.equal(buyResult, null, 'No buy — above shifted target');
   });
 
-  // 10. Upside break fires once at BTC close > 1.20×200wMA; deploys 40%
-  test('Upside break fires once, deploys 40% of powder', async () => {
-    const ma200 = 50000;
-    const config = makeConfig();
-    const prices = { BTC: 61000, ETH: 2700, SOL: 75, AQUARI: 0.01, XAUT: 2700 };
-    const closes = [61000]; // above 50000 × 1.20 = 60000
-
-    const r1 = await rules.checkUpsideBreak(closes, ma200, config, PID, PNAME, prices);
-    assert.ok(r1 !== null, 'Upside break should fire');
-    assert.ok(r1.includes('UPSIDE BREAKOUT'));
-    assert.ok(r1.includes('40%'));
-
-    // Must not fire again
-    const r2 = await rules.checkUpsideBreak(closes, ma200, config, PID, PNAME, prices);
-    assert.strictEqual(r2, null, 'Upside break must fire only once');
+  // §A.5.7: Skim still fires when brake is ON (shifted targets don't block skims)
+  test('Skim still fires when crash brake is active', async () => {
+    const assets = [
+      { symbol: 'SOL', class: 'liquid', weight: 0.25, holdingsUsd: 1000, avgCost: 100, lastActionPrice: 100, currentValue: 1210 },
+      { symbol: 'XAUT', class: 'liquid', weight: 0.25, holdingsUsd: 1000, avgCost: 2700, currentValue: 1000 },
+    ];
+    const shifted = rules.applyCrashBrakeWeights(assets);
+    const sol = shifted.find(a => a.symbol === 'SOL');
+    // Skim doesn't use portfolio targets — it checks lastActionPrice
+    const skimResult = await rules.checkSkim(sol, 121, PID, PNAME);
+    assert.ok(skimResult, 'Skim fires regardless of brake');
+    assert.equal(skimResult.type, 'SKIM');
   });
 
-  // 11. 1st-of-month summary sends even when nothing else fires
-  test('Monthly summary fires on the 1st', async (t) => {
-    t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 0, 1) });
-
-    const config = makeConfig();
-    const prices = { BTC: 65000 };
-    const r = await rules.checkMonthly(config, prices, PID, PNAME);
-    assert.ok(r !== null, 'Monthly should fire on 1st');
-    assert.ok(r.includes('MONTHLY REVIEW'));
+  // §A.5.8: Does not re-alert standing de-risk (I6)
+  test('Does not re-alert standing de-risk (I6)', async () => {
+    await rules.checkCrashBrake([49000, 48000], 50000, PID, PNAME, true);
+    const r = await rules.checkCrashBrake([47000, 46000], 50000, PID, PNAME, true);
+    assert.equal(r, null, 'Should not re-alert');
   });
 
-  test('Monthly does NOT fire on non-1st', async (t) => {
-    t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 0, 15) });
+  // §A.5.9: applyCrashBrakeWeights does not mutate originals
+  test('applyCrashBrakeWeights does not mutate original assets', () => {
+    const assets = [
+      { symbol: 'BTC', class: 'liquid', weight: 0.25 },
+      { symbol: 'XAUT', class: 'liquid', weight: 0.25 },
+    ];
+    const origWeights = assets.map(a => a.weight);
+    rules.applyCrashBrakeWeights(assets);
+    assert.deepEqual(assets.map(a => a.weight), origWeights, 'Originals untouched');
+  });
+});
 
-    const config = makeConfig();
-    const prices = { BTC: 65000 };
-    const r = await rules.checkMonthly(config, prices, PID, PNAME);
-    assert.strictEqual(r, null, 'Monthly must not fire on the 15th');
+// ══════════════════════════════════════════════════════════════
+// Monthly summary
+// ══════════════════════════════════════════════════════════════
+
+describe('Monthly summary', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('Fires on 1st of month', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 6, 1) });
+    const portfolio = makePortfolio();
+    const prices = { BTC: 70000, ETH: 2600, SOL: 72, XAUT: 2700 };
+    const r = await rules.checkMonthly(portfolio, prices, PID, PNAME);
+    assert.ok(r);
+    assert.equal(r.type, 'MONTHLY');
+    assert.ok(r.message.includes('MONTHLY REVIEW'));
   });
 
-  // 12. Same standing condition does NOT re-alert next run (I8)
-  test('I8: standing condition does not re-alert', async () => {
-    const ma200 = 50000;
-    const closes = [49000, 48000];
-
-    const r1 = await rules.checkThesisBreak(closes, ma200, PID, PNAME);
-    assert.ok(r1 !== null, 'First alert fires');
-
-    // Same condition next run
-    const r2 = await rules.checkThesisBreak(closes, ma200, PID, PNAME);
-    assert.strictEqual(r2, null, 'Must not re-alert same standing condition');
+  test('Does NOT fire on non-1st', async (t) => {
+    t.mock.timers.enable({ apis: ['Date'], now: Date.UTC(2026, 6, 15) });
+    const portfolio = makePortfolio();
+    const prices = { BTC: 70000 };
+    const r = await rules.checkMonthly(portfolio, prices, PID, PNAME);
+    assert.equal(r, null);
   });
+});
 
-  // 13. No exchange write/trade credential anywhere in the codebase (I9)
-  test('I9: no exchange write/trade credentials in codebase', async () => {
+// ══════════════════════════════════════════════════════════════
+// No exchange credentials (I8)
+// ══════════════════════════════════════════════════════════════
+
+describe('No exchange credentials (I8)', () => {
+  test('No exchange write/trade credential in codebase', async () => {
     const { execSync } = await import('node:child_process');
     const root = new URL('..', import.meta.url).pathname;
     let matches = '';
@@ -264,151 +411,337 @@ describe('§4 Checklist', () => {
         { encoding: 'utf-8' },
       ).trim();
     } catch {
-      // exit code 1 = no matches — exactly what we want
+      // exit code 1 = no matches
     }
-    assert.strictEqual(matches, '', `Exchange credentials found in: ${matches}`);
-  });
-
-  // 14. Caps hold after every simulated fill (I1, I2)
-  test('I1: total capital cap blocks buy when exceeded', async () => {
-    const config = makeConfig({
-      totalCapital: 15000,
-      reserveRemaining: 1500,
-      coins: {
-        BTC: { holdingsUsd: 4500, avgCost: 64000, buyReference: 64000 },
-        ETH: { holdingsUsd: 4500, avgCost: 2600, buyReference: 2600 },
-        SOL: { holdingsUsd: 4500, avgCost: 72, buyReference: 72 },
-      },
-    });
-    // totalDeployed=13500, deploy=400, reserve=1500 → 15400 > 15000
-    const r = await rules.checkBuyBand('BTC', 64000 * 0.92, config, PID, PNAME);
-    assert.strictEqual(r, null, 'I1 should block: 13500 + 400 + 1500 > 15000');
-  });
-
-  test('I2: per-coin cap blocks buy when exceeded', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 4700, avgCost: 64000, buyReference: 64000 } },
-    });
-    // 4700 + 400 = 5100 > 5000
-    const r = await rules.checkBuyBand('BTC', 64000 * 0.92, config, PID, PNAME);
-    assert.strictEqual(r, null, 'I2 should block: 4700 + 400 > 5000');
-  });
-
-  test('I2: buy allowed when exactly at cap', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 4600, avgCost: 64000, buyReference: 64000 } },
-    });
-    // 4600 + 400 = 5000 ≤ 5000
-    const r = await rules.checkBuyBand('BTC', 64000 * 0.92, config, PID, PNAME);
-    assert.ok(r !== null, 'Should fire: 4600 + 400 = 5000 is within cap');
+    assert.equal(matches, '', `Exchange credentials found: ${matches}`);
   });
 });
 
-// ============================================================
-// Drawdown zone boundary tests — prove dd sign-flip equivalence
-// ============================================================
+// ══════════════════════════════════════════════════════════════
+// Pure math helpers
+// ══════════════════════════════════════════════════════════════
 
-describe('Drawdown zones', () => {
-  const HIGH = 100000;
-
-  beforeEach(async () => {
-    mockStore._clear();
-    await mockStore.set('cycleHigh:BTC', HIGH);
+describe('Sizing math', () => {
+  test('getTargetValue = weight × capital', () => {
+    const asset = { weight: 0.25 };
+    const portfolio = { capital: 20000, assetCount: 4 };
+    assert.equal(rules.getTargetValue(asset, portfolio), 5000);
   });
 
-  test('dd formula: price/high−1 equals −(high−price)/high', () => {
-    const cases = [
-      { price: 80000, high: HIGH, expected: -0.20 },
-      { price: 65000, high: HIGH, expected: -0.35 },
-      { price: 50000, high: HIGH, expected: -0.50 },
-      { price: 100000, high: HIGH, expected: 0 },
-      { price: 120000, high: HIGH, expected: 0.20 },
-    ];
+  test('getDeviation correct', () => {
+    assert.ok(Math.abs(rules.getDeviation(2250, 2500) - (-0.10)) < 1e-10, 'Should be -10%');
+    assert.ok(Math.abs(rules.getDeviation(3000, 2500) - 0.20) < 1e-10, 'Should be +20%');
+    assert.equal(rules.getDeviation(2500, 2500), 0, 'On target = 0');
+  });
 
-    for (const { price, high, expected } of cases) {
-      const newDD = price / high - 1;
-      const oldDD = (high - price) / high; // always ≥ 0 for drops
-      assert.ok(
-        Math.abs(newDD - expected) < 1e-10,
-        `new formula at price ${price}: got ${newDD}, want ${expected}`,
-      );
-      assert.ok(
-        Math.abs(newDD + oldDD) < 1e-10,
-        `new + old should cancel: ${newDD} + ${oldDD}`,
-      );
+  test('No hardcoded dollar literal in rules.js (I7)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const code = readFileSync(resolve(import.meta.dirname, '..', 'lib', 'rules.js'), 'utf8');
+    // Match standalone numbers that look like hardcoded dollar amounts (100+)
+    // Exclude: 0.xx percentages, line numbers, array indices, format specifiers, Date math
+    const dollarLiterals = code.match(/(?<!\.)(?<!\d)\b(1[5-9]\d{2}|[2-9]\d{3}|\d{5,})\b(?![\.\d])/g);
+    // Filter out legitimate non-dollar numbers (86400000 = ms/day used in date math)
+    const suspicious = (dollarLiterals || []).filter(n => !['86400000'].includes(n));
+    assert.equal(suspicious.length, 0, `Found suspicious dollar literals: ${suspicious}`);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// I9: AI wording layer — never computes sizes or triggers
+// ══════════════════════════════════════════════════════════════
+
+describe('I9 — AI wording layer', () => {
+  test('Template fallback preserves exact numbers from signal', async () => {
+    const saved = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    try {
+      const { phraseSignal } = await import('../lib/ai-wording.js');
+      const signal = {
+        type: 'BUY_DIP',
+        asset: 'BTC',
+        deviation: -0.15,
+        buyAmountUsd: 375,
+        idealGapUsd: 375,
+        capped: false,
+      };
+      const text = await phraseSignal(signal);
+      assert.ok(text.includes('375'), 'Dollar amount preserved in template');
+      assert.ok(text.includes('15.0%'), 'Percentage preserved in template');
+    } finally {
+      if (saved) process.env.OPENROUTER_API_KEY = saved;
     }
   });
 
-  test('at −20% boundary: enters 20 zone', async () => {
-    const config = makeConfig();
-    // price/high−1 at exact 0.80 hits fp rounding; use 79999 to be clearly inside
-    const price = HIGH * 0.80 - 1;
-    const r = await rules.checkDrawdownZone('BTC', price, config, PID, PNAME);
-    assert.ok(r !== null, 'Should fire at −20%');
-    assert.ok(r.includes('DIP'), 'Should be the DIP zone');
+  test('AI prompt explicitly prohibits computing amounts', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    const code = readFileSync(resolve(import.meta.dirname, '..', 'lib', 'ai-wording.js'), 'utf8');
+    assert.ok(code.includes('Do NOT compute'), 'Prompt forbids computing');
+    assert.ok(code.includes('do NOT change any numbers'), 'Prompt forbids changing numbers');
   });
 
-  test('just above −20%: no zone', async () => {
-    const config = makeConfig();
-    const price = HIGH * 0.81; // dd = −0.19
-    const r = await rules.checkDrawdownZone('BTC', price, config, PID, PNAME);
-    assert.strictEqual(r, null, 'Should not fire above −20%');
+  test('addReason does not mutate signal numeric fields', async () => {
+    const saved = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+    try {
+      const { addReason } = await import('../lib/ai-wording.js');
+      const signal = {
+        type: 'SKIM',
+        asset: 'ETH',
+        gainFromAction: 0.25,
+        skimValueUsd: 150,
+        skimCoins: 0.05,
+      };
+      const original = { ...signal };
+      await addReason(signal);
+      assert.equal(signal.gainFromAction, original.gainFromAction, 'gainFromAction unchanged');
+      assert.equal(signal.skimValueUsd, original.skimValueUsd, 'skimValueUsd unchanged');
+      assert.equal(signal.skimCoins, original.skimCoins, 'skimCoins unchanged');
+      assert.ok(signal.reason, 'reason field added');
+    } finally {
+      if (saved) process.env.OPENROUTER_API_KEY = saved;
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// I10: Every signal shows $ amount + plain-language reason
+// ══════════════════════════════════════════════════════════════
+
+describe('I10 — Every signal shows $ + reason', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('formatSignalWithReason includes both reason and message', async () => {
+    const { formatSignalWithReason } = await import('../lib/ai-wording.js');
+    const signal = {
+      type: 'BUY_DIP',
+      reason: 'BTC dipped below target — buying to rebalance.',
+      message: 'BUY $375 of BTC at $65,000',
+    };
+    const output = formatSignalWithReason(signal);
+    assert.ok(output.includes(signal.reason), 'Includes reason');
+    assert.ok(output.includes(signal.message), 'Includes message');
+    assert.ok(output.includes('$'), 'Contains dollar sign');
   });
 
-  test('exactly −35%: enters 35 zone (deep dip)', async () => {
-    const config = makeConfig();
-    const price = HIGH * 0.65; // dd = −0.35
-    const r = await rules.checkDrawdownZone('BTC', price, config, PID, PNAME);
-    assert.ok(r !== null, 'Should fire at exactly −35%');
-    assert.ok(r.includes('DEEP DIP'));
+  test('BUY_DIP message contains dollar amount', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+    const r = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
+    assert.ok(r.message.includes('$'), 'BUY message has $');
   });
 
-  test('between −35% and −50%: 35 zone, not 50', async () => {
-    const config = makeConfig();
-    const price = HIGH * 0.60; // dd = −0.40
-    const r = await rules.checkDrawdownZone('BTC', price, config, PID, PNAME);
-    assert.ok(r !== null);
-    assert.ok(r.includes('DEEP DIP'), 'At −40% should be deep dip, not crash');
-  });
-
-  test('exactly −50%: enters 50 zone (crash)', async () => {
-    const config = makeConfig();
-    const price = HIGH * 0.50; // dd = −0.50
-    const r = await rules.checkDrawdownZone('BTC', price, config, PID, PNAME);
-    assert.ok(r !== null, 'Should fire at exactly −50%');
-    assert.ok(r.includes('CRASH'));
-  });
-
-  test('below −50%: still 50 zone', async () => {
-    const config = makeConfig();
-    const price = HIGH * 0.40; // dd = −0.60
-    const r = await rules.checkDrawdownZone('BTC', price, config, PID, PNAME);
-    assert.ok(r !== null);
-    assert.ok(r.includes('CRASH'));
-  });
-
-  test('zone transition alerts; same zone does not re-alert', async () => {
-    const config = makeConfig();
-
-    // Enter 20 zone (use price just inside boundary)
-    const r1 = await rules.checkDrawdownZone('BTC', HIGH * 0.80 - 1, config, PID, PNAME);
-    assert.ok(r1 !== null, 'First entry alerts');
-
-    // Same zone again → no alert
-    const r2 = await rules.checkDrawdownZone('BTC', HIGH * 0.78, config, PID, PNAME);
-    assert.strictEqual(r2, null, 'Same zone must not re-alert');
-
-    // Transition to 35 zone → alerts
-    const r3 = await rules.checkDrawdownZone('BTC', HIGH * 0.65, config, PID, PNAME);
-    assert.ok(r3 !== null, 'Zone transition should alert');
-  });
-
-  test('thesisStop blocks buy rung', async () => {
-    const config = makeConfig({
-      coins: { BTC: { holdingsUsd: 0, avgCost: 64000, buyReference: 64000 } },
+  test('SKIM message contains dollar amount', async () => {
+    const asset = makeAsset({
+      avgCost: 100, lastActionPrice: 100, holdingsUsd: 1000, currentValue: 1210,
     });
-    await mockStore.set(`thesisStop:${PID}`, true);
-    const r = await rules.checkBuyBand('BTC', 64000 * 0.92, config, PID, PNAME);
-    assert.strictEqual(r, null, 'Buy must not fire during thesis stop');
+    const r = await rules.checkSkim(asset, 121, PID, PNAME);
+    assert.ok(r.message.includes('$'), 'SKIM message has $');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// I11: Multi-portfolio independence
+// ══════════════════════════════════════════════════════════════
+
+describe('I11 — Multi-portfolio independence', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('Two portfolios fire BUY independently for same coin', async () => {
+    const portfolioA = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const portfolioB = makePortfolio({ capital: 15000, cash: 5000, portfolioValue: 15000 });
+    const assetA = makeAsset({ currentValue: 2000 });
+    const assetB = makeAsset({ currentValue: 3000 });
+
+    const rA = await rules.checkBuyDip(assetA, 65000, portfolioA, 'pfA', 'Alpha');
+    assert.ok(rA, 'Portfolio A fires');
+
+    const rB = await rules.checkBuyDip(assetB, 65000, portfolioB, 'pfB', 'Beta');
+    assert.ok(rB, 'Portfolio B fires independently');
+  });
+
+  test('Alerting PF-A does not suppress PF-B (I6 per-portfolio)', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2000 });
+
+    // Fire and suppress PF-A
+    await rules.checkBuyDip(asset, 65000, portfolio, 'pfA', 'Alpha');
+    const rA2 = await rules.checkBuyDip(asset, 64000, portfolio, 'pfA', 'Alpha');
+    assert.equal(rA2, null, 'PF-A suppressed (I6)');
+
+    // PF-B should still fire
+    const rB = await rules.checkBuyDip(asset, 65000, portfolio, 'pfB', 'Beta');
+    assert.ok(rB, 'PF-B fires — not suppressed by PF-A');
+  });
+
+  test('Crash brake state is per-portfolio', async () => {
+    await rules.checkCrashBrake([49000, 48000], 50000, 'pfA', 'Alpha', true);
+    const rB = await rules.checkCrashBrake([49000, 48000], 50000, 'pfB', 'Beta', true);
+    assert.ok(rB, 'PF-B de-risks independently');
+    assert.equal(rB.action, 'deRisk');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Add-money — capital change recomputes targets
+// ══════════════════════════════════════════════════════════════
+
+describe('Add-money recompute', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('Adding capital increases target and triggers buy', async () => {
+    // At target: capital=8000, weight=0.25 → target=2000, current=2000 → no buy
+    const pBefore = makePortfolio({ capital: 8000, cash: 2000, portfolioValue: 8000 });
+    const asset = makeAsset({ currentValue: 2000 });
+    const rBefore = await rules.checkBuyDip(asset, 70000, pBefore, PID, PNAME);
+    assert.equal(rBefore, null, 'No buy when on target');
+
+    // User adds $4000 → capital=12000, target=3000, current=2000 → 33% below → buy
+    mockStore._clear();
+    const pAfter = makePortfolio({ capital: 12000, cash: 6000, portfolioValue: 12000 });
+    const rAfter = await rules.checkBuyDip(asset, 70000, pAfter, PID, PNAME);
+    assert.ok(rAfter, 'Buy fires after adding capital');
+    assert.equal(rAfter.buyAmountUsd, 1000, 'Gap = 3000 - 2000 = 1000');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// I5: AQUARI safe sell calculator (microcap sleeve)
+// ══════════════════════════════════════════════════════════════
+
+describe('I5 — AQUARI safe sell calculator', () => {
+  beforeEach(() => mockStore._clear());
+
+  // Helper: build mock reserves hex for RPC response
+  function mockRpcResult(wethRaw, aquariRaw) {
+    const r0 = wethRaw.toString(16).padStart(64, '0');
+    const r1 = aquariRaw.toString(16).padStart(64, '0');
+    return '0x' + r0 + r1 + '0'.repeat(64);
+  }
+
+  // Helper: mock fetch for both RPC + DexScreener
+  function mockFetch({ rpcReserves, dexVolume, dexChange = 25, dexLiquidity = 5000 }) {
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      if (typeof url === 'string' && (url.includes('base.org') || url.includes('llamarpc') || url.includes('1rpc'))) {
+        return { ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result: rpcReserves }) };
+      }
+      if (typeof url === 'string' && url.includes('dexscreener')) {
+        return {
+          ok: true,
+          json: async () => ({
+            pairs: [{
+              pairAddress: '0x30Ec7B2f5be26d03D20AC86554dAadD2b738CA0F',
+              volume: { h24: dexVolume },
+              priceChange: { h24: dexChange },
+              priceUsd: '0.002',
+              liquidity: { usd: dexLiquidity },
+            }],
+          }),
+        };
+      }
+      return origFetch(url);
+    };
+    return origFetch;
+  }
+
+  test('Slippage stays under 1.5% cap (I5)', async () => {
+    const { computeSafeSellSize } = await import('../lib/aquari.js');
+    // Pool: 1M AQUARI + 1 WETH, generous volume
+    const result = computeSafeSellSize({
+      aquariReserve: BigInt(1_000_000) * BigInt(10 ** 18),
+      wethReserve: BigInt(10 ** 18),
+      volume24hUsd: 10000,
+      ethPriceUsd: 2000,
+      maxSlippagePct: 0.015,
+      volumeCapPct: 0.20,
+    });
+    assert.ok(result.actualSlippage <= 0.015, `Slippage ${result.actualSlippage} exceeds 1.5%`);
+    assert.ok(result.actualSlippage > 0, 'Should have some slippage');
+    assert.ok(result.safeSellUsd > 0, 'Should suggest a non-zero sell');
+    assert.equal(result.limitingFactor, 'slippage');
+  });
+
+  test('Capped at 20% of volume when volume is small (I5)', async () => {
+    const { computeSafeSellSize } = await import('../lib/aquari.js');
+    const result = computeSafeSellSize({
+      aquariReserve: BigInt(1_000_000) * BigInt(10 ** 18),
+      wethReserve: BigInt(10 ** 18),
+      volume24hUsd: 100,
+      ethPriceUsd: 2000,
+      maxSlippagePct: 0.015,
+      volumeCapPct: 0.20,
+    });
+    // Volume cap = 100 × 0.20 = $20, slippage limit ≈ $30
+    assert.ok(Math.abs(result.safeSellUsd - 20) < 0.01, `Expected ~$20, got ${result.safeSellUsd}`);
+    assert.equal(result.limitingFactor, 'volume');
+    // Slippage at volume-capped size should be UNDER max
+    assert.ok(result.actualSlippage < 0.015, 'Slippage at capped size should be under max');
+  });
+
+  test('Safe sell message includes $ and reasoning', async () => {
+    const { checkAquariSell } = await import('../lib/aquari.js');
+    const wethRaw = BigInt(10 ** 18);
+    const aquariRaw = BigInt(1_000_000) * BigInt(10 ** 18);
+    const origFetch = mockFetch({
+      rpcReserves: mockRpcResult(wethRaw, aquariRaw),
+      dexVolume: 5000,
+      dexChange: 25,
+    });
+    try {
+      const result = await checkAquariSell(
+        { symbol: 'AQUARI', holdingsUsd: 500, avgCost: 0.001, class: 'microcap' },
+        { ETH: 2000 }, PID, PNAME,
+      );
+      assert.ok(result, 'Should return a result');
+      assert.equal(result.error, false);
+      assert.ok(result.message.includes('$'), 'Message shows dollar amount');
+      assert.ok(result.message.includes('Slippage'), 'Shows slippage');
+      assert.ok(result.message.includes('volume'), 'Shows volume context');
+      assert.ok(result.message.includes('depth') || result.message.includes('Pool depth'), 'Shows depth');
+      assert.ok(result.message.includes('Principal'), 'Shows principal recovered');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  test('RPC failure → error signal saying don\'t trade', async () => {
+    const { checkAquariSell } = await import('../lib/aquari.js');
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = async () => { throw new Error('Network timeout'); };
+    try {
+      const result = await checkAquariSell(
+        { symbol: 'AQUARI', holdingsUsd: 500, avgCost: 0.001, class: 'microcap' },
+        { ETH: 2000 }, PID, PNAME,
+      );
+      assert.ok(result, 'Should return an error result');
+      assert.equal(result.error, true);
+      assert.ok(result.message.includes("Don't trade"), 'Tells user not to trade');
+      assert.equal(result.safeSellUsd, 0, 'Suggests $0');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  test('Dead volume / thin pool → returns null (no tiny clip)', async () => {
+    const { checkAquariSell } = await import('../lib/aquari.js');
+    const wethRaw = BigInt(10 ** 18);
+    const aquariRaw = BigInt(1_000_000) * BigInt(10 ** 18);
+    const origFetch = mockFetch({
+      rpcReserves: mockRpcResult(wethRaw, aquariRaw),
+      dexVolume: 10,        // dead volume ($10)
+      dexChange: 50,        // pump trigger met
+      dexLiquidity: 100,    // thin liquidity
+    });
+    try {
+      const result = await checkAquariSell(
+        { symbol: 'AQUARI', holdingsUsd: 500, avgCost: 0.001, class: 'microcap' },
+        { ETH: 2000 }, PID, PNAME,
+      );
+      assert.equal(result, null, 'Should skip — no tiny clip');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
   });
 });

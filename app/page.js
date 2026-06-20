@@ -78,9 +78,19 @@ export default function Dashboard() {
     );
   }
 
-  const coins = config?.coins || {};
+  const assets = config?.assets || [];
+  const coins = config?.coins || {}; // legacy fallback for rendering
+  const assetList = assets.length > 0 ? assets : Object.entries(coins).map(([sym, cc]) => ({ symbol: sym, ...cc, class: sym === 'AQUARI' ? 'microcap' : 'liquid', weight: 0.25 }));
   const hasActiveAlerts = status?.alerts?.length > 0;
   const activePortfolio = portfolios.find(p => p.id === activePid);
+  const capital = config?.capital || config?.totalCapital || 0;
+  const cash = config?.cash || config?.powderRemaining || 0;
+  const portfolioValue = assetList.reduce((s, a) => {
+    const p = prices?.[a.symbol];
+    if (!p || !a.avgCost || a.avgCost === 0) return s;
+    return s + (a.holdingsUsd / a.avgCost) * p;
+  }, 0) + cash;
+  const spendableCash = Math.max(0, cash - portfolioValue * 0.10);
 
   return (
     <div className="min-h-screen pb-20 sm:pb-0">
@@ -162,11 +172,11 @@ export default function Dashboard() {
 
         {/* Portfolio Value */}
         {(() => {
-          const totalCost = Object.values(coins).reduce((s, c) => s + (c.holdingsUsd || 0), 0);
-          const totalCurrentValue = Object.entries(coins).reduce((s, [coin, cc]) => {
-            const p = prices?.[coin];
-            if (!p || !cc.avgCost || cc.avgCost === 0) return s;
-            return s + (cc.holdingsUsd / cc.avgCost) * p;
+          const totalCost = assetList.reduce((s, a) => s + (a.holdingsUsd || 0), 0);
+          const totalCurrentValue = assetList.reduce((s, a) => {
+            const p = prices?.[a.symbol];
+            if (!p || !a.avgCost || a.avgCost === 0) return s;
+            return s + (a.holdingsUsd / a.avgCost) * p;
           }, 0);
           const totalPnl = totalCurrentValue - totalCost;
           const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
@@ -220,22 +230,22 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3 sm:gap-4 border-t border-zinc-800/40 pt-4">
-                <Tooltip text="Total money you put into this portfolio — coins + cash + reserve combined.">
+                <Tooltip text="Total capital allocated to this portfolio. All target weights are percentages of this number.">
                   <div>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Budget</p>
-                    <p className="text-xs sm:text-sm font-mono font-bold mt-0.5 tabular-nums">{fmt(config?.totalCapital)}</p>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Capital</p>
+                    <p className="text-xs sm:text-sm font-mono font-bold mt-0.5 tabular-nums">{fmt(capital)}</p>
                   </div>
                 </Tooltip>
-                <Tooltip text="Cash you can spend on the next dip. Each buy uses 1/5 of this. Goes down every time you buy.">
+                <Tooltip text="Total cash in this portfolio. 10% is always kept as a dry-powder floor.">
                   <div>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Cash Ready</p>
-                    <p className="text-xs sm:text-sm font-mono font-bold text-blue-400 mt-0.5 tabular-nums">{fmt(config?.powderRemaining)}</p>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Cash</p>
+                    <p className="text-xs sm:text-sm font-mono font-bold text-blue-400 mt-0.5 tabular-nums">{fmt(cash)}</p>
                   </div>
                 </Tooltip>
-                <Tooltip text="Emergency cash. Locked until a big crash happens and the price stabilizes. Then you can use it to buy cheap.">
+                <Tooltip text="Cash above the 10% floor that can be spent on dip-buys. Floor keeps ammo for the next dip.">
                   <div>
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Reserve</p>
-                    <p className="text-xs sm:text-sm font-mono font-bold text-amber-400 mt-0.5 tabular-nums">{fmt(config?.reserveRemaining)}</p>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium">Spendable</p>
+                    <p className="text-xs sm:text-sm font-mono font-bold text-emerald-400 mt-0.5 tabular-nums">{fmt(spendableCash)}</p>
                   </div>
                 </Tooltip>
               </div>
@@ -243,9 +253,11 @@ export default function Dashboard() {
           );
         })()}
 
-        {/* Coin Cards */}
+        {/* Asset Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-          {Object.entries(coins).map(([coin, cc], idx) => {
+          {assetList.map((asset, idx) => {
+            const coin = asset.symbol;
+            const cc = asset;
             const price = prices?.[coin];
             if (!price) return null;
             const colors = COIN_COLORS[coin] || DEFAULT_COLOR;
@@ -253,11 +265,14 @@ export default function Dashboard() {
             const totalCoins = cc.avgCost > 0 ? cc.holdingsUsd / cc.avgCost : 0;
             const currentValue = totalCoins * price;
             const pnlUsd = currentValue - cc.holdingsUsd;
-            const buyAt = cc.buyReference * (1 - (config?.buyBandPct || 0.07));
-            const buyDropPct = cc.buyReference > 0 ? ((cc.buyReference - buyAt) / cc.buyReference * 100).toFixed(0) : 7;
-            const sellAt = cc.avgCost * ((config?.trimMultiples || [2.0, 3.0, 4.0])[0]);
-            const nearBuy = cc.buyReference > 0 && price <= buyAt;
-            const nearSell = cc.avgCost > 0 && price >= sellAt;
+            // Target-based zones
+            const weight = asset.weight || (1 / assetList.filter(a => a.class === 'liquid').length);
+            const targetVal = weight * capital;
+            const deviation = targetVal > 0 ? (currentValue - targetVal) / targetVal : 0;
+            const nearBuy = deviation <= -0.10 && cc.holdingsUsd >= 0;
+            const lastAction = asset.lastActionPrice || cc.avgCost || 0;
+            const skimGain = lastAction > 0 ? (price - lastAction) / lastAction : 0;
+            const nearSell = cc.avgCost > 0 && price > cc.avgCost && skimGain >= 0.20;
 
             return (
               <div key={coin}
@@ -306,47 +321,48 @@ export default function Dashboard() {
                   )}
 
                   {/* Buy/Sell Zones */}
-                  {cc.buyReference > 0 && (
+                  {(weight > 0 || cc.avgCost > 0) && (
                     <div className="border-t border-zinc-800/40 pt-2.5 sm:pt-3 mt-2.5 sm:mt-3 space-y-1.5 sm:space-y-2">
-                      <Tooltip block text={(() => {
-                      const powder = config?.powderRemaining || 0;
-                      const deploy = Math.max(powder / 5, 0);
-                      const coinsToBuy = buyAt > 0 ? deploy / buyAt : 0;
-                      const newAvg = cc.holdingsUsd > 0
-                        ? (cc.holdingsUsd + deploy) / ((cc.holdingsUsd / cc.avgCost) + coinsToBuy)
-                        : buyAt;
-                      const cashAfter = powder - deploy;
-                      const actualDrop = cc.buyReference > 0 ? ((cc.buyReference - price) / cc.buyReference * 100).toFixed(1) : '—';
-                      const notYet = price > buyAt;
-                      return `Buy when ${coin} drops ${buyDropPct}% below your last buy\n\nLast buy was at ${fmtPrice(cc.buyReference)}\nBuy triggers at ${fmtPrice(buyAt)}\nPrice now: ${fmtPrice(price)} (${actualDrop}% below)${notYet ? ' — not there yet' : ' — BUY NOW'}\n\nSpend ${fmt(deploy)} → get ${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nCash left after: ${fmt(cashAfter)}`;
-                    })()}>
-                        <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
-                          nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
-                        }`}>
-                          <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
-                            {nearBuy ? 'BUY ZONE' : 'Next buy'}
-                          </span>
-                          <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
-                            {fmtPrice(buyAt)}
-                          </span>
-                        </div>
-                      </Tooltip>
+                      {weight > 0 && targetVal > 0 && (
+                        <Tooltip block text={(() => {
+                          const gap = Math.max(targetVal - currentValue, 0);
+                          const buyAmount = Math.min(gap, spendableCash);
+                          const coinsToBuy = price > 0 ? buyAmount / price : 0;
+                          const deviationPct = (deviation * 100).toFixed(1);
+                          const newCoins = totalCoins + coinsToBuy;
+                          const newHoldings = cc.holdingsUsd + buyAmount;
+                          const newAvg = newCoins > 0 ? newHoldings / newCoins : price;
+                          return `Buy when ${coin} drifts ≥10% below its target weight\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of ${fmt(capital)})\nCurrent value: ${fmt(currentValue)}\nDeviation: ${deviationPct}%${deviation <= -0.10 ? ' — BUY ZONE' : ' — within range'}\n\nIf buying now:\nSpend ${fmt(buyAmount)} to close the gap\nGet ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nSpendable cash left: ${fmt(Math.max(spendableCash - buyAmount, 0))}`;
+                        })()}>
+                          <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
+                            nearBuy ? 'bg-blue-500/10 border border-blue-500/25 shadow-sm shadow-blue-500/5' : 'bg-zinc-800/30 border border-transparent'
+                          }`}>
+                            <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
+                              {nearBuy ? 'BUY ZONE' : 'Target'}
+                            </span>
+                            <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
+                              {fmt(targetVal)} ({(deviation * 100).toFixed(1)}%)
+                            </span>
+                          </div>
+                        </Tooltip>
+                      )}
 
                       {cc.avgCost > 0 && (
                         <Tooltip block text={(() => {
-                          const actualGain = cc.avgCost > 0 ? ((price - cc.avgCost) / cc.avgCost * 100).toFixed(1) : '—';
-                          const notYet = price < sellAt;
-                          const trimPct = ((config?.sellTrimPct || 0.15) * 100).toFixed(0);
-                          return `Sell ${trimPct}% when ${coin} doubles (2x your avg cost)\n\nAvg cost: ${fmtPrice(cc.avgCost)}\nFirst sell at ${fmtPrice(sellAt)} (2x)\nPrice now: ${fmtPrice(price)} (${actualGain}% above avg)${notYet ? ' — not there yet' : ' — SELL NOW'}\n\n3 trims total: at 2x, 3x, and 4x your avg cost\nTrailing stop: if it drops 30% from peak, sell 25%`;
+                          const skimTriggerPrice = lastAction * 1.20;
+                          const skimValue = currentValue * 0.05;
+                          const skimCoins = price > 0 ? skimValue / price : 0;
+                          const gainPct = (skimGain * 100).toFixed(1);
+                          return `Skim 5% when ${coin} rises ≥20% from last action AND above avg cost\n\nLast action: ${fmtPrice(lastAction)}\nSkim triggers at: ${fmtPrice(skimTriggerPrice)}\nAvg cost: ${fmtPrice(cc.avgCost)}\nPrice now: ${fmtPrice(price)} (${gainPct}% from last action)${nearSell ? ' — SKIM NOW' : ' — not there yet'}\n\nIf skimming now:\nSell ${fmtCoinAmt(skimCoins)} ${coin} (5% of position)\nProceeds: ~${fmt(skimValue)}\nRemaining 95% keeps riding`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 sm:py-2.5 transition-all duration-200 ${
                             nearSell ? 'bg-orange-500/10 border border-orange-500/25 shadow-sm shadow-orange-500/5' : 'bg-zinc-800/30 border border-transparent'
                           }`}>
                             <span className={`text-[11px] sm:text-xs font-medium whitespace-nowrap ${nearSell ? 'text-orange-300' : 'text-zinc-500'}`}>
-                              {nearSell ? 'SELL ZONE' : 'First sell'}
+                              {nearSell ? 'SKIM ZONE' : 'Skim at'}
                             </span>
                             <span className={`font-mono text-[11px] sm:text-xs tabular-nums ${nearSell ? 'text-orange-300 font-bold' : 'text-zinc-500'}`}>
-                              {fmtPrice(sellAt)}
+                              {fmtPrice(lastAction * 1.20)}
                             </span>
                           </div>
                         </Tooltip>
@@ -364,35 +380,34 @@ export default function Dashboard() {
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Safety Checks</h2>
           <p className="text-[11px] text-zinc-500 mt-0.5 mb-3 sm:mb-4">Automated monitoring across all portfolios</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Tooltip block text="Warns you when a coin drops -20%, -35%, or -50% from its highest price this cycle. The bigger the drop, the more cautious you should be.">
+            <Tooltip block text="10% of portfolio value is always kept as cash. When cash drops below this floor, buy signals are capped or suppressed to preserve dry powder for the next dip.">
               <CheckRow
-                label="Drawdown Warning"
-                desc="Price drops -20%, -35%, or -50% from high"
-                active={Object.keys(coins).some(c => status?.rules?.[`drawdown:${c}`])}
+                label="Cash Floor"
+                desc="10% of portfolio kept as dry powder"
+                active={cash < portfolioValue * 0.10}
               />
             </Tooltip>
-            <Tooltip block text="After a big crash, this checks if the price stopped falling. If it stays above the bottom for 2 weeks in a row, it's safe to start buying again with your reserve cash.">
+            <Tooltip block text="When an asset drifts ≥10% below its target weight, a buy signal fires. The gap is filled using spendable cash (cash above the 10% floor).">
               <CheckRow
-                label="Floor Confirmed"
-                desc="Holds above bottom for 2 weeks"
-                active={Object.keys(coins).some(c => status?.rules?.[`floorConfirmed:${c}`])}
+                label="Active Buy Signals"
+                desc="Assets ≥10% below target weight"
+                active={assetList.some(a => {
+                  const p = prices?.[a.symbol];
+                  if (!p || !a.avgCost || a.avgCost === 0) return false;
+                  const cv = (a.holdingsUsd / a.avgCost) * p;
+                  const tv = (a.weight || 0) * capital;
+                  return tv > 0 && (cv - tv) / tv <= -0.10;
+                })}
               />
             </Tooltip>
-            <Tooltip block text="If BTC stays below a key long-term trendline for 2 weeks straight, something is seriously wrong. Stop all buying and wait it out.">
+            <Tooltip block text="If BTC closes below the 200-week moving average for 2 consecutive weeks, half of each crypto target shifts to gold + cash. Re-risks when BTC recovers above the MA. Optional — off by default.">
               <CheckRow
-                label="Thesis Break"
+                label="Crash Brake"
                 desc="BTC below 200-week MA for 2 weeks"
-                active={status?.rules?.thesisBreak}
+                active={status?.rules?.crashBrakeActive}
               />
             </Tooltip>
-            <Tooltip block text="If BTC closes a week above 1.2x the 200-week moving average, the downtrend is over. Deploy 40% of each coin's remaining cash immediately.">
-              <CheckRow
-                label="Upside Breakout"
-                desc="BTC close above 1.2x 200-week MA"
-                active={status?.rules?.upsideBreak}
-              />
-            </Tooltip>
-            <Tooltip block text="Every 1st of the month, you get a summary of all your coins, P&L, and how much cash you have left. Just a check-in.">
+            <Tooltip block text="Every 1st of the month, you get a summary of all your assets, P&L, and portfolio balance. Just a monthly check-in.">
               <CheckRow
                 label="Monthly Review"
                 desc="1st of each month summary"

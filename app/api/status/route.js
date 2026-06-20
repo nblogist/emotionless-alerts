@@ -7,18 +7,15 @@ export const dynamic = 'force-dynamic';
 export async function GET(request) {
   const pid = request.nextUrl.searchParams.get('portfolio') || 'corolla';
   const config = (await store.get(`config:${pid}`)) || DEFAULT_CONFIG;
-  const coins = Object.keys(config.coins);
+  const assets = config.assets || [];
 
   const rules = {};
-  for (const coin of coins) {
-    rules[`buyBand:${coin}`] = !!(await store.get(`alerted:${pid}:buyBand:${coin}`));
-    rules[`sellTrigger:${coin}`] = ((await store.get(`trimsDone:${pid}:${coin}`)) || 0) > 0 || !!(await store.get(`sellBaseline:${pid}:${coin}`));
-    const dz = await store.get(`drawdownZone:${pid}:${coin}`);
-    rules[`drawdown:${coin}`] = dz || null;
-    rules[`floorConfirmed:${coin}`] = !!(await store.get(`alerted:${pid}:floorConfirmed:${coin}`));
+  for (const asset of assets) {
+    const sym = asset.symbol;
+    rules[`buyDip:${sym}`] = !!(await store.get(`alerted:${pid}:buyDip:${sym}`));
+    rules[`skim:${sym}`] = false; // skim alerts are per-reference, tracked differently
   }
-  rules.thesisBreak = !!(await store.get(`thesisStop:${pid}`));
-  rules.upsideBreak = !!(await store.get(`upsideBreakDone:${pid}`));
+  rules.crashBrake = !!(await store.get(`crashBrakeActive:${pid}`));
 
   const btcCloses = (await store.get('weeklyCloses:BTC')) || [];
   const ma200 =

@@ -219,43 +219,26 @@ export default function Settings() {
 
         {/* Portfolio Capital */}
         <Section title="Portfolio Capital" delay={50}>
-          <Field label="Total Capital" value={config?.totalCapital} onChange={(v) => update('totalCapital', Number(v))} prefix="$" />
-          <Field label="Per Coin Cap" value={config?.perCoinCap} onChange={(v) => update('perCoinCap', Number(v))} prefix="$" />
-          <Field label="Powder Remaining" value={config?.powderRemaining} onChange={(v) => update('powderRemaining', Number(v))} prefix="$" hint="Cash available for new buy rungs" />
-          <Field label="Reserve Remaining" value={config?.reserveRemaining} onChange={(v) => update('reserveRemaining', Number(v))} prefix="$" hint="Deep-crash reserve (unlocked on floor confirmation)" />
+          <Field label="Capital" value={config?.capital} onChange={(v) => update('capital', Number(v))} prefix="$" hint="Total capital allocated — all weights are % of this" />
+          <Field label="Cash" value={config?.cash} onChange={(v) => update('cash', Number(v))} prefix="$" hint="Cash in portfolio — 10% kept as dry-powder floor" />
         </Section>
 
-        {/* Rule Parameters */}
-        <Section title="Rule Parameters" delay={100}>
-          <Field
-            label="Buy Band"
-            value={config?.buyBandPct != null ? (config.buyBandPct * 100).toFixed(0) : ''}
-            onChange={(v) => update('buyBandPct', Number(v) / 100)}
-            suffix="%"
-            hint="Alert when price drops this % below buy reference"
-          />
-          <Field
-            label="Sell Trim %"
-            value={config?.sellTrimPct != null ? (config.sellTrimPct * 100).toFixed(0) : '15'}
-            onChange={(v) => update('sellTrimPct', Number(v) / 100)}
-            suffix="%"
-            hint="% of baseline to sell at each trim (2x, 3x, 4x avg cost)"
-          />
-          <Field
-            label="Per-Coin Cap"
-            value={config?.perCoinCap}
-            onChange={(v) => update('perCoinCap', Number(v))}
-            prefix="$"
-            hint="Max deployed per coin (buy rungs stop at this)"
-          />
-        </Section>
-
-        {/* Coins */}
-        {Object.entries(config?.coins || {}).map(([coin, cc], idx) => (
-          <Section key={coin} title={coin} badge={coin} delay={150 + idx * 40}>
-            <Field label="Holdings" value={cc.holdingsUsd} onChange={(v) => update(`coins.${coin}.holdingsUsd`, Number(v))} prefix="$" />
-            <Field label="Avg Cost" value={cc.avgCost} onChange={(v) => update(`coins.${coin}.avgCost`, Number(v))} prefix="$" hint="Your average entry price" />
-            <Field label="Buy Reference" value={cc.buyReference} onChange={(v) => update(`coins.${coin}.buyReference`, Number(v))} prefix="$" hint="Lower this to your fill price after each buy" />
+        {/* Assets */}
+        {(config?.assets || []).map((asset, idx) => (
+          <Section key={asset.symbol} title={asset.symbol} badge={asset.symbol} delay={150 + idx * 40}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-[10px] px-2 py-0.5 rounded-md border ${asset.class === 'liquid' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>{asset.class}</span>
+            </div>
+            <Field
+              label="Weight"
+              value={asset.weight != null ? (asset.weight * 100).toFixed(0) : ''}
+              onChange={(v) => update(`assets.${idx}.weight`, Number(v) / 100)}
+              suffix="%"
+              hint="Target portfolio weight"
+            />
+            <Field label="Holdings (USD)" value={asset.holdingsUsd} onChange={(v) => update(`assets.${idx}.holdingsUsd`, Number(v))} prefix="$" hint="Total cost basis of position" />
+            <Field label="Avg Cost" value={asset.avgCost} onChange={(v) => update(`assets.${idx}.avgCost`, Number(v))} prefix="$" hint="Your average entry price" />
+            <Field label="Last Action Price" value={asset.lastActionPrice} onChange={(v) => update(`assets.${idx}.lastActionPrice`, Number(v))} prefix="$" hint="Price at last buy/sell — skim triggers 20% above this" />
           </Section>
         ))}
 
@@ -263,14 +246,16 @@ export default function Settings() {
         <Section title="How to Update After a Trade" delay={300}>
           <div className="text-sm text-zinc-400 space-y-3 leading-relaxed">
             <p>
-              <strong className="text-zinc-200">After a BUY fills:</strong> Lower
-              the coin&apos;s <em className="text-zinc-300">Buy Reference</em> to the fill price. Reduce{' '}
-              <em className="text-zinc-300">Powder Remaining</em> by the amount deployed. Update{' '}
-              <em className="text-zinc-300">Holdings</em> and <em className="text-zinc-300">Avg Cost</em>.
+              <strong className="text-zinc-200">After a BUY fills:</strong> Update the
+              asset&apos;s <em className="text-zinc-300">Holdings</em> and <em className="text-zinc-300">Avg Cost</em>.
+              Set <em className="text-zinc-300">Last Action Price</em> to your fill price.
+              Reduce <em className="text-zinc-300">Cash</em> by the amount spent.
             </p>
             <p>
-              <strong className="text-zinc-200">After a SELL fills:</strong>{' '}
-              Update <em className="text-zinc-300">Holdings</em> to reflect the trimmed position.
+              <strong className="text-zinc-200">After a SELL fills:</strong> Reduce{' '}
+              <em className="text-zinc-300">Holdings</em> to reflect the trimmed position.
+              Set <em className="text-zinc-300">Last Action Price</em> to your sell price.
+              Increase <em className="text-zinc-300">Cash</em> by the proceeds.
             </p>
             <p className="text-emerald-400/80">
               <strong className="text-emerald-400">Or just use Transactions:</strong>{' '}
