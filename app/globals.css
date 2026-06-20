@@ -56,6 +56,16 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;
@@ -78,6 +88,12 @@ body {
   }
   .animate-slide-up-mobile {
     animation: slide-up-mobile 0.3s ease-out both;
+  }
+  .animate-fade-in {
+    animation: fade-in 0.2s ease-out both;
+  }
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out both;
   }
 }
 

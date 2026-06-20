@@ -275,8 +275,8 @@ export default function Dashboard() {
             const nearSell = cc.avgCost > 0 && price > cc.avgCost && skimGain >= 0.20;
 
             return (
-              <div key={coin}
-                className={`bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 sm:p-5 hover:border-zinc-700/50 hover:bg-zinc-900/80 hover:z-10 relative active:scale-[0.98] sm:active:scale-100 transition-all duration-200 animate-fade-up`}
+              <Link key={coin} href={`/coin/${coin.toLowerCase()}?portfolio=${activePid}`}
+                className={`block bg-zinc-900/60 border border-zinc-800/50 ${colors.border} border-t-2 rounded-2xl p-4 sm:p-5 hover:border-zinc-700/50 hover:bg-zinc-900/80 hover:z-10 relative active:scale-[0.98] sm:active:scale-100 transition-all duration-200 animate-fade-up`}
                 style={{ animationDelay: `${100 + idx * 60}ms` }}
               >
                 {/* Header */}
@@ -370,7 +370,7 @@ export default function Dashboard() {
                     </div>
                   )}
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
