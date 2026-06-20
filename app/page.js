@@ -18,6 +18,8 @@ export default function Dashboard() {
   const [portfolios, setPortfolios] = useState([]);
   const [activePid, setActivePid] = useState(null);
   const [alertsSeenAt, setAlertsSeenAt] = useState(null);
+  const [histPrices, setHistPrices] = useState(null);
+  const [pnlPeriod, setPnlPeriod] = useState('all');
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -32,13 +34,14 @@ export default function Dashboard() {
     if (!activePid) return;
     if (isRefresh) setRefreshing(true);
     try {
-      const [pRes, cRes, sRes, nRes, aRes, seenRes] = await Promise.all([
+      const [pRes, cRes, sRes, nRes, aRes, seenRes, hRes] = await Promise.all([
         fetch('/api/prices'),
         fetch(`/api/config?portfolio=${activePid}`),
         fetch(`/api/status?portfolio=${activePid}`),
         fetch('/api/news'),
         fetch('/api/activity'),
         fetch('/api/alerts-seen'),
+        fetch('/api/prices/history'),
       ]);
       setPrices(await pRes.json());
       setConfig(await cRes.json());
@@ -47,6 +50,8 @@ export default function Dashboard() {
       setActivity(await aRes.json());
       const seenData = await seenRes.json();
       setAlertsSeenAt(seenData.seenAt);
+      const hData = await hRes.json();
+      if (!hData.error) setHistPrices(hData);
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -185,6 +190,22 @@ export default function Dashboard() {
           }, 0);
           const totalPnl = totalCurrentValue - totalCost;
           const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
+
+          // Period P&L: compare current portfolio value vs value at past prices
+          let displayPnl = totalPnl;
+          let displayPnlPct = totalPnlPct;
+          if (pnlPeriod !== 'all' && histPrices?.[pnlPeriod]) {
+            const pastPrices = histPrices[pnlPeriod];
+            const pastAssetValue = assetList.reduce((s, a) => {
+              const pastP = pastPrices[a.symbol];
+              if (!pastP || !a.avgCost || a.avgCost === 0) return s;
+              return s + (a.holdingsUsd / a.avgCost) * pastP;
+            }, 0);
+            const pastTotal = pastAssetValue + cash;
+            displayPnl = (totalCurrentValue + cash) - pastTotal;
+            displayPnlPct = pastTotal > 0 ? (displayPnl / pastTotal) * 100 : 0;
+          }
+
           return (
             <div className="relative overflow-hidden glass rounded-3xl p-6 sm:p-7 animate-fade-up" style={{ animationDelay: '50ms' }}>
               {/* Decorative blurs */}
@@ -216,6 +237,24 @@ export default function Dashboard() {
                   )}
                 </div>
 
+                {/* P&L Period Selector */}
+                <div className="flex items-center gap-1.5 mb-5">
+                  {[['all', 'All'], ['24h', '24H'], ['7d', '7D'], ['30d', '30D'], ['90d', '90D']].map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setPnlPeriod(key)}
+                      disabled={key !== 'all' && !histPrices?.[key]}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                        pnlPeriod === key
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                          : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40 border border-transparent'
+                      } disabled:opacity-30 disabled:cursor-not-allowed`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="space-y-5 sm:space-y-0 sm:grid sm:grid-cols-3 sm:gap-x-8 mb-6">
                   <div>
                     <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Portfolio Value</p>
@@ -227,18 +266,18 @@ export default function Dashboard() {
                       <p className="text-lg sm:text-xl font-mono font-bold text-zinc-400 mt-1.5 tabular-nums">{fmt(totalCost)}</p>
                     </div>
                     <div className="flex-1 sm:hidden">
-                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Profit / Loss</p>
-                      <p className={`text-lg font-mono font-bold mt-1.5 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
-                        <span className="text-[10px] ml-1 opacity-70">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">{pnlPeriod === 'all' ? 'Profit / Loss' : `${pnlPeriod.toUpperCase()} P&L`}</p>
+                      <p className={`text-lg font-mono font-bold mt-1.5 tabular-nums ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {displayPnl >= 0 ? '+' : ''}{fmt(displayPnl)}
+                        <span className="text-[10px] ml-1 opacity-70">({displayPnlPct >= 0 ? '+' : ''}{displayPnlPct.toFixed(1)}%)</span>
                       </p>
                     </div>
                   </div>
                   <div className="hidden sm:block">
-                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">Total Profit / Loss</p>
-                    <p className={`text-xl font-mono font-bold mt-1.5 tabular-nums ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)}
-                      <span className="text-xs ml-1 opacity-70">({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)</span>
+                    <p className="text-[11px] text-zinc-500 uppercase tracking-wider font-medium">{pnlPeriod === 'all' ? 'Total Profit / Loss' : `${pnlPeriod.toUpperCase()} Profit / Loss`}</p>
+                    <p className={`text-xl font-mono font-bold mt-1.5 tabular-nums ${displayPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {displayPnl >= 0 ? '+' : ''}{fmt(displayPnl)}
+                      <span className="text-xs ml-1 opacity-70">({displayPnlPct >= 0 ? '+' : ''}{displayPnlPct.toFixed(1)}%)</span>
                     </p>
                   </div>
                 </div>
