@@ -427,7 +427,10 @@ export default function Dashboard() {
             const weight = asset.weight || (1 / assetList.filter(a => a.class === 'liquid').length);
             const targetVal = weight * capital;
             const deviation = targetVal > 0 ? (currentValue - targetVal) / targetVal : 0;
-            const nearBuy = deviation <= -0.10 && cc.holdingsUsd >= 0;
+            const belowCost = cc.avgCost > 0 && price < cc.avgCost;
+            const rHigh = histPrices?.recentHighs?.[coin] || 0;
+            const dipFromHigh = rHigh > 0 && price <= rHigh * 0.80;  // 20% below recent high
+            const nearBuy = (belowCost || dipFromHigh) && deviation <= 0.10;
             const lastAction = asset.lastActionPrice || cc.avgCost || 0;
             const skimGain = lastAction > 0 ? (price - lastAction) / lastAction : 0;
             const nearSell = cc.avgCost > 0 && price > cc.avgCost && skimGain >= 0.20;
@@ -488,26 +491,32 @@ export default function Dashboard() {
                       {weight > 0 && targetVal > 0 && (
                         <Tooltip block text={(() => {
                           const gap = Math.max(targetVal - currentValue, 0);
-                          const buyAmount = Math.min(gap, spendableCash);
+                          const clip = gap > 0 ? gap * 0.5 : 0;
+                          const buyAmount = Math.min(clip, spendableCash);
                           const coinsToBuy = price > 0 ? buyAmount / price : 0;
-                          const deviationPct = Math.abs(deviation * 100).toFixed(1);
                           const newCoins = totalCoins + coinsToBuy;
                           const newHoldings = cc.holdingsUsd + buyAmount;
                           const newAvg = newCoins > 0 ? newHoldings / newCoins : price;
-                          const statusLine = deviation <= -0.10 ? 'Buy signal active' : 'Within range, no action needed';
-                          const buySection = buyAmount > 0
-                            ? `\nSuggested buy:\nSpend ${fmt(buyAmount)} \u2192 get ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nCash remaining: ${fmt(Math.max(spendableCash - buyAmount, 0))}`
-                            : `\nNo spendable cash available.\nAdd funds or take profits to free up cash.`;
-                          return `${coin} is ${deviationPct}% ${deviation < 0 ? 'below' : 'above'} its target allocation. ${statusLine}.\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of your ${fmt(capital)} capital)\nCurrent value: ${fmt(currentValue)}\nGap: ${fmt(gap)}${gap > 0 ? buySection : ''}`;
+                          const discount = cc.avgCost > 0 ? ((cc.avgCost - price) / cc.avgCost * 100).toFixed(1) : '0';
+                          const highDrop = rHigh > 0 ? ((rHigh - price) / rHigh * 100).toFixed(1) : '0';
+                          const statusLine = nearBuy
+                            ? (belowCost ? `Buy signal active \u2014 price is ${discount}% below your avg cost` : `Buy signal active \u2014 price is ${highDrop}% off its recent high`)
+                            : price >= cc.avgCost ? 'Price is at/above your avg cost \u2014 no buy signal' : 'Already above target allocation \u2014 no buy signal';
+                          const buySection = nearBuy && buyAmount > 0
+                            ? `\nSuggested buy (half the gap to target):\nSpend ${fmt(buyAmount)} \u2192 get ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nCash remaining: ${fmt(Math.max(spendableCash - buyAmount, 0))}`
+                            : nearBuy ? `\nNo spendable cash available.\nAdd funds or take profits to free up cash.` : '';
+                          return `Buys when ${coin}'s price drops below your avg cost or \u226520% below its 30-day high. ${statusLine}.\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of your ${fmt(capital)} capital)\nCurrent value: ${fmt(currentValue)}${buySection}`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
                             nearBuy ? 'bg-blue-500/8 border border-blue-500/20' : 'bg-zinc-800/20 border border-transparent'
                           }`}>
                             <span className={`text-[11px] font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
-                              {nearBuy ? 'BUY ZONE' : 'Target alloc.'}
+                              {nearBuy ? 'DIP BUY' : 'Avg cost'}
                             </span>
                             <span className={`font-mono text-[11px] tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
-                              {fmt(targetVal)} ({(deviation * 100).toFixed(1)}% {deviation < 0 ? 'below' : 'above'})
+                              {nearBuy
+                                ? (belowCost ? `${((cc.avgCost - price) / cc.avgCost * 100).toFixed(1)}% below avg` : `${((rHigh - price) / rHigh * 100).toFixed(1)}% off high`)
+                                : fmtPrice(cc.avgCost)}
                             </span>
                           </div>
                         </Tooltip>
@@ -550,14 +559,15 @@ export default function Dashboard() {
             <Tooltip block text="10% of portfolio value is always kept as cash. When cash drops below this floor, buy signals are capped or suppressed to preserve dry powder for the next dip.">
               <CheckRow label="Cash Floor" desc="10% of portfolio kept as dry powder" active={cash < portfolioValue * 0.10} />
             </Tooltip>
-            <Tooltip block text="When an asset drifts >=10% below its target weight, a buy signal fires. The gap is filled using spendable cash (cash above the 10% floor).">
-              <CheckRow label="Active Buy Signals" desc="Assets >=10% below target weight"
+            <Tooltip block text="Buy signals fire when an asset's price drops below your average cost \u2014 a genuine dip that lowers your average. Won't buy if already over target allocation (+10% tolerance).">
+              <CheckRow label="Dip Buy Signals" desc="Price below your avg cost"
                 active={assetList.some(a => {
                   const p = prices?.[a.symbol];
                   if (!p || !a.avgCost || a.avgCost === 0) return false;
                   const cv = (a.holdingsUsd / a.avgCost) * p;
                   const tv = (a.weight || 0) * capital;
-                  return tv > 0 && (cv - tv) / tv <= -0.10;
+                  const dev = tv > 0 ? (cv - tv) / tv : 0;
+                  return p < a.avgCost && dev <= 0.10;
                 })}
               />
             </Tooltip>

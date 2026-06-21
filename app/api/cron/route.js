@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as store from '@/lib/store';
 import { DEFAULT_CONFIG, DEFAULT_PORTFOLIOS, STRATEGY_CONFIG } from '@/lib/defaults';
-import { fetchPricesSafe, fetchWeeklyCloses } from '@/lib/prices';
+import { fetchPricesSafe, fetchWeeklyCloses, fetchHistoricalPrices } from '@/lib/prices';
 import * as rules from '@/lib/rules';
 import { addReason, formatSignalWithReason } from '@/lib/ai-wording';
 import { checkAquariSell } from '@/lib/aquari';
@@ -123,6 +123,15 @@ export async function GET(request) {
         ? btcCloses.slice(-200).reduce((a, b) => a + b, 0) / 200
         : null;
 
+    // Fetch recent highs for dip-from-high buy path (b)
+    let recentHighs = {};
+    try {
+      const hist = await fetchHistoricalPrices();
+      recentHighs = hist.recentHighs || {};
+    } catch (e) {
+      console.error('Failed to fetch recent highs:', e.message);
+    }
+
     // News scanning
     let newsAlert = null;
     let aiAnalysis = null;
@@ -225,11 +234,12 @@ export async function GET(request) {
         if (!price) continue;  // Skip assets with no valid price — never compute off garbage
 
         // Clear buy-dip alert if recovered
-        await rules.clearBuyDipIfRecovered(asset, price, portfolio, pf.id);
+        const rh = recentHighs[asset.symbol] || 0;
+        await rules.clearBuyDipIfRecovered(asset, price, portfolio, pf.id, rh);
 
         // 1. BUY THE DIP
         const buyText = await processSignal(
-          await rules.checkBuyDip(asset, price, portfolio, pf.id, pf.name),
+          await rules.checkBuyDip(asset, price, portfolio, pf.id, pf.name, rh),
           price, portfolio, pf.id,
         );
         if (buyText) alerts.push(buyText);

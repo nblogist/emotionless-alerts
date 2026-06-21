@@ -44,36 +44,35 @@ const PNAME = 'Test';
 describe('§F Checklist — Liquid Basket', () => {
   beforeEach(() => mockStore._clear());
 
-  // §F.1: BUY fires at exactly 10% below target; size brings asset back to target; shown in $
-  test('BUY fires at 10% below target; size = gap to target', async () => {
-    // Target = 0.25 × 10000 = 2500. Current = 2200 → 12% below.
+  // §F.1: BUY fires when price < avgCost; size = half the gap to target; shown in $
+  test('BUY fires when price is below avg cost', async () => {
+    // avgCost = 70000, price = 65000 → below cost. Target = 2500, current = 2200, gap = 300, clip = 150.
     const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
     const asset = makeAsset({ currentValue: 2200 });
     const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
     assert.ok(result, 'Should fire');
     assert.equal(result.type, 'BUY_DIP');
-    // Gap = 2500 - 2200 = 300
-    assert.equal(result.buyAmountUsd, 300, 'Buy amount = gap to target');
+    // Gap = 2500 - 2200 = 300. Clip = 150 (half).
+    assert.equal(result.buyAmountUsd, 150, 'Buy amount = half the gap to target');
     assert.ok(result.message.includes('$'), 'Shows dollar amount');
   });
 
-  // §F.2: No buy fires when asset is within 10% of target
-  test('No buy when asset is within 10% of target', async () => {
-    // Target = 2500. Current = 2300 → only 8% below.
+  // §F.2: No buy fires when price is at or above avg cost
+  test('No buy when price is at or above avg cost', async () => {
+    // avgCost = 70000, price = 72000 → above cost, no buy regardless of weight.
     const portfolio = makePortfolio();
     const asset = makeAsset({ currentValue: 2300 });
-    const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
-    assert.equal(result, null, 'Should not fire within 10%');
+    const result = await rules.checkBuyDip(asset, 72000, portfolio, PID, PNAME);
+    assert.equal(result, null, 'Should not fire above avg cost');
   });
 
-  // Exact boundary: exactly 10% below fires
-  test('BUY fires at exactly 10% below target', async () => {
-    // Target = 2500. Current = 2250 → exactly 10% below.
+  // No buy when asset is already >10% over target (over-concentrated)
+  test('No buy when asset is already over target (+10% tolerance)', async () => {
+    // avgCost = 70000, price = 65000 → below cost. But currentValue = 3000 vs target = 2500 → 20% above → blocked.
     const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
-    const asset = makeAsset({ currentValue: 2250 });
+    const asset = makeAsset({ currentValue: 3000 });
     const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
-    assert.ok(result, 'Should fire at exactly 10%');
-    assert.equal(result.buyAmountUsd, 250, 'Gap = 2500 - 2250 = 250');
+    assert.equal(result, null, 'Should not fire — already over-concentrated');
   });
 
   // §F.3: SKIM fires at +20% from last action & above cost; sells 5%; resets reference
@@ -131,10 +130,10 @@ describe('§F Checklist — Liquid Basket', () => {
       symbol: 'XAUT', weight: 0.25, currentValue: 2000,
       holdingsUsd: 2000, avgCost: 2700, lastActionPrice: 2700,
     });
-    // Target = 2500, current = 2000 → 20% below → buy fires
+    // avgCost = 2700, price = 2600 → below cost. Target = 2500, current = 2000. Gap = 500, clip = 250.
     const buyResult = await rules.checkBuyDip(goldAsset, 2600, portfolio, PID, PNAME);
     assert.ok(buyResult, 'Gold buy should fire');
-    assert.equal(buyResult.buyAmountUsd, 500, 'Gold buys same as crypto');
+    assert.equal(buyResult.buyAmountUsd, 250, 'Gold buys half the gap, same as crypto');
 
     // Gold skim — up 20% from last action
     mockStore._clear();
@@ -149,21 +148,112 @@ describe('§F Checklist — Liquid Basket', () => {
 
   // §F.7: Sizes scale with capital; nothing hardcoded; change capital → all $ recompute
   test('Sizes scale with capital — doubling capital doubles buy amount', async () => {
-    // P = 10000: target = 2500, current = 2000 → buy 500
+    // P = 10000: target = 2500, current = 2000, gap = 500, clip = 250
     const pSmall = makePortfolio({ capital: 10000, cash: 3000, portfolioValue: 10000 });
     const aSmall = makeAsset({ currentValue: 2000 });
     const rSmall = await rules.checkBuyDip(aSmall, 65000, pSmall, 'p1', PNAME);
     assert.ok(rSmall);
-    assert.equal(rSmall.buyAmountUsd, 500);
+    assert.equal(rSmall.buyAmountUsd, 250);
 
-    // P = 20000: target = 5000, current = 4000 → buy 1000
+    // P = 20000: target = 5000, current = 4000, gap = 1000, clip = 500
     mockStore._clear();
     const pLarge = makePortfolio({ capital: 20000, cash: 6000, portfolioValue: 20000 });
     const aLarge = makeAsset({ currentValue: 4000 });
     const rLarge = await rules.checkBuyDip(aLarge, 65000, pLarge, 'p2', PNAME);
     assert.ok(rLarge);
-    assert.equal(rLarge.buyAmountUsd, 1000);
+    assert.equal(rLarge.buyAmountUsd, 500);
     assert.equal(rLarge.buyAmountUsd, rSmall.buyAmountUsd * 2, 'Double capital → double buy');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Path (b): Dip-from-high trigger
+// ══════════════════════════════════════════════════════════════
+
+describe('BUY path (b) — dip from recent high', () => {
+  beforeEach(() => mockStore._clear());
+
+  test('Fires when price is ≥20% below recent high (even above avg cost)', async () => {
+    // avgCost = 70000, price = 72000 (above cost!) but recentHigh = 100000 → 72000 is 28% below → fires
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2200 });
+    const result = await rules.checkBuyDip(asset, 72000, portfolio, PID, PNAME, 100000);
+    assert.ok(result, 'Should fire — 28% below recent high');
+    assert.equal(result.buyReason, 'dip_from_high');
+    assert.ok(result.highDrop > 0.20, 'highDrop should exceed 20%');
+    assert.equal(result.recentHigh, 100000);
+  });
+
+  test('Does NOT fire when price is only 15% below recent high', async () => {
+    // recentHigh = 100000, price = 85000 → only 15% below → no trigger
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2200 });
+    const result = await rules.checkBuyDip(asset, 85000, portfolio, PID, PNAME, 100000);
+    // price 85000 > avgCost 70000 → path (a) off. 15% drop < 20% → path (b) off.
+    assert.equal(result, null, 'Should not fire — only 15% below high');
+  });
+
+  test('Prefers path (a) when both triggers fire', async () => {
+    // price = 60000 < avgCost = 70000 → path (a). Also 40% below recentHigh = 100000 → path (b).
+    // Should prefer 'below_cost'.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2000 });
+    const result = await rules.checkBuyDip(asset, 60000, portfolio, PID, PNAME, 100000);
+    assert.ok(result);
+    assert.equal(result.buyReason, 'below_cost', 'Prefers below_cost when both fire');
+  });
+
+  test('Path (b) respects the +10% over-target guard', async () => {
+    // price = 72000, recentHigh = 100000 (28% below). But currentValue = 3000 vs target 2500 → 20% over → blocked.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 3000 });
+    const result = await rules.checkBuyDip(asset, 72000, portfolio, PID, PNAME, 100000);
+    assert.equal(result, null, 'Blocked — already over target');
+  });
+
+  test('Path (b) uses half-gap sizing same as path (a)', async () => {
+    // recentHigh = 100000, price = 75000 (25% below). avgCost = 70000 (above cost).
+    // Target = 2500, current = 2000. Gap = 500, clip = 250.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2000 });
+    const result = await rules.checkBuyDip(asset, 75000, portfolio, PID, PNAME, 100000);
+    assert.ok(result);
+    assert.equal(result.buyAmountUsd, 250, 'Half-gap sizing applies');
+    assert.equal(result.buyReason, 'dip_from_high');
+  });
+
+  test('clearBuyDipIfRecovered clears when price above cost AND near high', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2000 });
+    // Trigger path (b)
+    await rules.checkBuyDip(asset, 75000, portfolio, PID, PNAME, 100000);
+    // Recover: price = 85000 (above cost, and 85000 > 100000*0.80 → near high)
+    await rules.clearBuyDipIfRecovered(asset, 85000, portfolio, PID, 100000);
+    // Should fire again
+    const r2 = await rules.checkBuyDip(asset, 75000, portfolio, PID, PNAME, 100000);
+    assert.ok(r2, 'Should re-arm after recovery');
+  });
+
+  test('clearBuyDipIfRecovered does NOT clear when still far from high', async () => {
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2000 });
+    // Trigger path (b)
+    await rules.checkBuyDip(asset, 75000, portfolio, PID, PNAME, 100000);
+    // "Recover" above cost but still 25% below high → still in dip territory
+    await rules.clearBuyDipIfRecovered(asset, 75000, portfolio, PID, 100000);
+    // Should NOT re-fire (still alerted)
+    const r2 = await rules.checkBuyDip(asset, 75000, portfolio, PID, PNAME, 100000);
+    assert.equal(r2, null, 'Should not re-arm — still far below high');
+  });
+
+  test('No path (b) when recentHigh is 0 or missing', async () => {
+    // price = 72000 > avgCost = 70000 → path (a) off. No recent high → path (b) off.
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ avgCost: 70000, currentValue: 2200 });
+    const r1 = await rules.checkBuyDip(asset, 72000, portfolio, PID, PNAME, 0);
+    assert.equal(r1, null);
+    const r2 = await rules.checkBuyDip(asset, 72000, portfolio, PID, PNAME);
+    assert.equal(r2, null);
   });
 });
 
@@ -176,7 +266,7 @@ describe('10% Cash Floor', () => {
 
   test('Buy is capped when it would breach the 10% cash floor', async () => {
     // Portfolio value = 10000, floor = 1000. Cash = 1200. Spendable = 200.
-    // Target = 2500, current = 2000 → ideal gap = 500. But only 200 spendable.
+    // Target = 2500, current = 2000, gap = 500, clip = 250. But only 200 spendable.
     const portfolio = makePortfolio({ cash: 1200, portfolioValue: 10000 });
     const asset = makeAsset({ currentValue: 2000 });
     const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
@@ -198,12 +288,12 @@ describe('10% Cash Floor', () => {
 
   test('Buy is NOT capped when cash is well above the floor', async () => {
     // Portfolio value = 10000, floor = 1000. Cash = 3000. Spendable = 2000.
-    // Gap = 500 < 2000 → not capped.
+    // Gap = 500, clip = 250 < 2000 → not capped.
     const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
     const asset = makeAsset({ currentValue: 2000 });
     const result = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
     assert.ok(result);
-    assert.equal(result.buyAmountUsd, 500);
+    assert.equal(result.buyAmountUsd, 250);
     assert.equal(result.capped, false, 'Should not be capped');
   });
 
@@ -229,9 +319,11 @@ describe('Transition-only alerts (I6)', () => {
     const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
     const asset = makeAsset({ currentValue: 2000 });
 
+    // price = 65000 < avgCost = 70000 → fires
     const r1 = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
     assert.ok(r1, 'First fires');
 
+    // Still below cost → should not re-alert
     const r2 = await rules.checkBuyDip(asset, 64000, portfolio, PID, PNAME);
     assert.equal(r2, null, 'Same condition should not re-alert');
   });
@@ -243,11 +335,10 @@ describe('Transition-only alerts (I6)', () => {
     const r1 = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
     assert.ok(r1, 'First fires');
 
-    // Recover above threshold
-    const recovered = makeAsset({ currentValue: 2500 });
-    await rules.clearBuyDipIfRecovered(recovered, 70000, portfolio, PID);
+    // Price recovers above avg cost → clears alert
+    await rules.clearBuyDipIfRecovered(asset, 72000, portfolio, PID);
 
-    // Drop again
+    // Drop again below cost
     const r2 = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
     assert.ok(r2, 'Should fire again after recovery');
   });
@@ -324,7 +415,7 @@ describe('Crash Brake (§A.5)', () => {
   // §A.5.6: Buy uses shifted target when brake is ON
   test('Buy uses shifted targets when brake is active', async () => {
     // Normal target = 0.25 × 10000 = 2500. Shifted target = 0.125 × 10000 = 1250.
-    // Asset currentValue = 2000 → above shifted target → no buy.
+    // Asset currentValue = 2000 → 60% above shifted target → over-concentrated → no buy.
     const assets = [
       { symbol: 'BTC',  class: 'liquid', weight: 0.25, holdingsUsd: 2000, avgCost: 70000, currentValue: 2000 },
       { symbol: 'XAUT', class: 'liquid', weight: 0.25, holdingsUsd: 2000, avgCost: 2700, currentValue: 2000 },
@@ -332,9 +423,9 @@ describe('Crash Brake (§A.5)', () => {
     const shifted = rules.applyCrashBrakeWeights(assets);
     const portfolio = { capital: 10000, cash: 3000, portfolioValue: 10000, assetCount: 2, assets: shifted };
     const btc = shifted.find(a => a.symbol === 'BTC');
-    // Shifted target for BTC = 0.125 × 10000 = 1250. currentValue = 2000 → 60% above → no buy
-    const buyResult = await rules.checkBuyDip(btc, 70000, portfolio, PID, PNAME);
-    assert.equal(buyResult, null, 'No buy — above shifted target');
+    // price = 65000 < avgCost = 70000 (dip trigger met), BUT shifted target = 1250, currentValue = 2000 → 60% above → blocked
+    const buyResult = await rules.checkBuyDip(btc, 65000, portfolio, PID, PNAME);
+    assert.equal(buyResult, null, 'No buy — above shifted target (over-concentrated)');
   });
 
   // §A.5.7: Skim still fires when brake is ON (shifted targets don't block skims)
@@ -460,6 +551,7 @@ describe('I9 — AI wording layer', () => {
       const signal = {
         type: 'BUY_DIP',
         asset: 'BTC',
+        discount: 0.15,
         deviation: -0.15,
         buyAmountUsd: 375,
         idealGapUsd: 375,
@@ -526,6 +618,7 @@ describe('I10 — Every signal shows $ + reason', () => {
   });
 
   test('BUY_DIP message contains dollar amount', async () => {
+    // price=65000 < avgCost=70000 → dip buy fires
     const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
     const asset = makeAsset({ currentValue: 2000 });
     const r = await rules.checkBuyDip(asset, 65000, portfolio, PID, PNAME);
@@ -549,6 +642,7 @@ describe('I11 — Multi-portfolio independence', () => {
   beforeEach(() => mockStore._clear());
 
   test('Two portfolios fire BUY independently for same coin', async () => {
+    // Both below cost (price=65000 < avgCost=70000), both below target
     const portfolioA = makePortfolio({ cash: 3000, portfolioValue: 10000 });
     const portfolioB = makePortfolio({ capital: 15000, cash: 5000, portfolioValue: 15000 });
     const assetA = makeAsset({ currentValue: 2000 });
@@ -565,7 +659,7 @@ describe('I11 — Multi-portfolio independence', () => {
     const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
     const asset = makeAsset({ currentValue: 2000 });
 
-    // Fire and suppress PF-A
+    // Fire and suppress PF-A (price=65000 < avgCost=70000)
     await rules.checkBuyDip(asset, 65000, portfolio, 'pfA', 'Alpha');
     const rA2 = await rules.checkBuyDip(asset, 64000, portfolio, 'pfA', 'Alpha');
     assert.equal(rA2, null, 'PF-A suppressed (I6)');
@@ -590,19 +684,20 @@ describe('I11 — Multi-portfolio independence', () => {
 describe('Add-money recompute', () => {
   beforeEach(() => mockStore._clear());
 
-  test('Adding capital increases target and triggers buy', async () => {
-    // At target: capital=8000, weight=0.25 → target=2000, current=2000 → no buy
+  test('Adding capital increases target and triggers buy when price is below cost', async () => {
+    // price = 70000 = avgCost → no buy (not a dip)
     const pBefore = makePortfolio({ capital: 8000, cash: 2000, portfolioValue: 8000 });
     const asset = makeAsset({ currentValue: 2000 });
     const rBefore = await rules.checkBuyDip(asset, 70000, pBefore, PID, PNAME);
-    assert.equal(rBefore, null, 'No buy when on target');
+    assert.equal(rBefore, null, 'No buy when price = avg cost');
 
-    // User adds $4000 → capital=12000, target=3000, current=2000 → 33% below → buy
+    // User adds $4000 AND price dips below cost → fires
     mockStore._clear();
     const pAfter = makePortfolio({ capital: 12000, cash: 6000, portfolioValue: 12000 });
-    const rAfter = await rules.checkBuyDip(asset, 70000, pAfter, PID, PNAME);
-    assert.ok(rAfter, 'Buy fires after adding capital');
-    assert.equal(rAfter.buyAmountUsd, 1000, 'Gap = 3000 - 2000 = 1000');
+    // price = 65000 < avgCost = 70000, target = 3000, current = 2000, gap = 1000, clip = 500
+    const rAfter = await rules.checkBuyDip(asset, 65000, pAfter, PID, PNAME);
+    assert.ok(rAfter, 'Buy fires after adding capital + price dip');
+    assert.equal(rAfter.buyAmountUsd, 500, 'Clip = half of gap (1000) = 500');
   });
 });
 
@@ -620,24 +715,25 @@ describe('I5 — AQUARI safe sell calculator', () => {
     return '0x' + r0 + r1 + '0'.repeat(64);
   }
 
-  // Helper: mock fetch for both RPC + DexScreener
+  // Helper: mock fetch for both RPC + GeckoTerminal
   function mockFetch({ rpcReserves, dexVolume, dexChange = 25, dexLiquidity = 5000 }) {
     const origFetch = globalThis.fetch;
     globalThis.fetch = async (url) => {
       if (typeof url === 'string' && (url.includes('base.org') || url.includes('llamarpc') || url.includes('1rpc'))) {
         return { ok: true, json: async () => ({ jsonrpc: '2.0', id: 1, result: rpcReserves }) };
       }
-      if (typeof url === 'string' && url.includes('dexscreener')) {
+      if (typeof url === 'string' && url.includes('geckoterminal')) {
         return {
           ok: true,
           json: async () => ({
-            pairs: [{
-              pairAddress: '0x30Ec7B2f5be26d03D20AC86554dAadD2b738CA0F',
-              volume: { h24: dexVolume },
-              priceChange: { h24: dexChange },
-              priceUsd: '0.002',
-              liquidity: { usd: dexLiquidity },
-            }],
+            data: {
+              attributes: {
+                volume_usd: { h24: String(dexVolume) },
+                price_change_percentage: { h24: String(dexChange) },
+                base_token_price_usd: '0.002',
+                reserve_in_usd: String(dexLiquidity),
+              },
+            },
           }),
         };
       }
