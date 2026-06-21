@@ -427,7 +427,7 @@ export default function Dashboard() {
             const weight = asset.weight || (1 / assetList.filter(a => a.class === 'liquid').length);
             const targetVal = weight * capital;
             const deviation = targetVal > 0 ? (currentValue - targetVal) / targetVal : 0;
-            const belowCost = cc.avgCost > 0 && price < cc.avgCost;
+            const belowCost = cc.avgCost > 0 && (cc.avgCost - price) / cc.avgCost >= 0.05;
             const rHigh = histPrices?.recentHighs?.[coin] || 0;
             const dipFromHigh = rHigh > 0 && price <= rHigh * 0.80;  // 20% below recent high
             const nearBuy = (belowCost || dipFromHigh) && deviation <= 0.10;

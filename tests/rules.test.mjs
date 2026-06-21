@@ -66,6 +66,32 @@ describe('§F Checklist — Liquid Basket', () => {
     assert.equal(result, null, 'Should not fire above avg cost');
   });
 
+  // minDipPct filter: trivial dips (0.1%, 4%) are noise — only ≥5% fires
+  test('No buy when price is only 0.1% below avg cost (noise)', async () => {
+    // avgCost = 70000, price = 69930 → 0.1% below → too small
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2200 });
+    const result = await rules.checkBuyDip(asset, 69930, portfolio, PID, PNAME);
+    assert.equal(result, null, 'Should not fire — 0.1% is noise');
+  });
+
+  test('No buy when price is 4% below avg cost (still noise)', async () => {
+    // avgCost = 70000, price = 67200 → 4% below → under 5% threshold
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2200 });
+    const result = await rules.checkBuyDip(asset, 67200, portfolio, PID, PNAME);
+    assert.equal(result, null, 'Should not fire — 4% is below minDipPct');
+  });
+
+  test('Buy DOES fire when price is 5%+ below avg cost', async () => {
+    // avgCost = 70000, price = 66500 → 5% below → fires
+    const portfolio = makePortfolio({ cash: 3000, portfolioValue: 10000 });
+    const asset = makeAsset({ currentValue: 2200 });
+    const result = await rules.checkBuyDip(asset, 66500, portfolio, PID, PNAME);
+    assert.ok(result, 'Should fire — 5% is a real dip');
+    assert.equal(result.buyReason, 'below_cost');
+  });
+
   // No buy when asset is already >10% over target (over-concentrated)
   test('No buy when asset is already over target (+10% tolerance)', async () => {
     // avgCost = 70000, price = 65000 → below cost. But currentValue = 3000 vs target = 2500 → 20% above → blocked.
@@ -130,8 +156,8 @@ describe('§F Checklist — Liquid Basket', () => {
       symbol: 'XAUT', weight: 0.25, currentValue: 2000,
       holdingsUsd: 2000, avgCost: 2700, lastActionPrice: 2700,
     });
-    // avgCost = 2700, price = 2600 → below cost. Target = 2500, current = 2000. Gap = 500, clip = 250.
-    const buyResult = await rules.checkBuyDip(goldAsset, 2600, portfolio, PID, PNAME);
+    // avgCost = 2700, price = 2550 → 5.6% below cost (meets 5% minDipPct). Target = 2500, current = 2000. Gap = 500, clip = 250.
+    const buyResult = await rules.checkBuyDip(goldAsset, 2550, portfolio, PID, PNAME);
     assert.ok(buyResult, 'Gold buy should fire');
     assert.equal(buyResult.buyAmountUsd, 250, 'Gold buys half the gap, same as crypto');
 
