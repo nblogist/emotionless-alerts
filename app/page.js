@@ -719,7 +719,18 @@ export default function Dashboard() {
                           const buySection = nearBuy && buyAmount > 0
                             ? `\nSuggested buy (half the gap to target):\nSpend ${fmt(buyAmount)} \u2192 get ~${fmtCoinAmt(coinsToBuy)} ${coin}\nNew avg cost: ${fmtPrice(newAvg)}\nCash remaining: ${fmt(Math.max(spendableCash - buyAmount, 0))}`
                             : nearBuy ? `\nNo spendable cash available.\nAdd funds or take profits to free up cash.` : '';
-                          return `Buys when ${coin}'s price drops below your avg cost or \u226520% below its 30-day high. ${statusLine}.\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of your ${fmt(capital)} capital)\nCurrent value: ${fmt(currentValue)}${buySection}`;
+                          // How much to spend at current price to clear the DIP BUY (bring avg within 5% of price)
+                          let clearSection = '';
+                          if (belowCost && cc.avgCost > 0 && price > 0 && totalCoins > 0) {
+                            const targetAvg = price / 0.95; // avg cost must be below this to clear
+                            if (cc.avgCost > targetAvg) {
+                              const clearUsd = totalCoins * (0.95 * cc.avgCost - price) / 0.05;
+                              const clearCoins = clearUsd / price;
+                              const clearedAvg = (cc.holdingsUsd + clearUsd) / (totalCoins + clearCoins);
+                              clearSection = `\n\nTo clear DIP BUY signal:\nSpend ${fmt(Math.ceil(clearUsd))} at ${fmtPrice(price)} \u2192 new avg: ${fmtPrice(clearedAvg)}\n(Brings avg cost within 5% of current price)`;
+                            }
+                          }
+                          return `Buys when ${coin}'s price drops below your avg cost or \u226520% below its 30-day high. ${statusLine}.\n\nTarget: ${fmt(targetVal)} (${(weight * 100).toFixed(0)}% of your ${fmt(capital)} capital)\nCurrent value: ${fmt(currentValue)}${buySection}${clearSection}`;
                         })()}>
                           <div className={`flex justify-between items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200 ${
                             nearBuy ? 'bg-blue-500/8 border border-blue-500/20' : 'bg-zinc-800/20 border border-transparent'
