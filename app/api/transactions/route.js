@@ -48,9 +48,24 @@ function recalculateConfig(config, transactions) {
     asset.lastActionPrice = lastActionPrice;
   }
 
+  // Compute net cash impact from all transactions: buys subtract, sells add
+  const totalBuySpend = transactions
+    .filter(t => t.type === 'buy')
+    .reduce((sum, t) => sum + t.amount * t.pricePerCoin, 0);
+  const totalSellProceeds = transactions
+    .filter(t => t.type === 'sell')
+    .reduce((sum, t) => sum + t.amount * t.pricePerCoin, 0);
+
+  // Adjust cash: start from initialCash (set once), then subtract buys, add sells
+  if (config.initialCash === undefined) {
+    // First time: capture current cash + all past buy spend as the starting point
+    config.initialCash = (config.cash || 0) + totalBuySpend - totalSellProceeds;
+  }
+  config.cash = config.initialCash - totalBuySpend + totalSellProceeds;
+
   // Capital = cash + sum of all holdingsUsd
   const totalHoldings = config.assets.reduce((sum, a) => sum + (a.holdingsUsd || 0), 0);
-  config.capital = (config.cash || 0) + totalHoldings;
+  config.capital = config.cash + totalHoldings;
 
   return config;
 }

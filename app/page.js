@@ -351,7 +351,7 @@ export default function Dashboard() {
                     <span className="text-white text-sm font-bold">$</span>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium uppercase tracking-wider">{stablecoin} Cash Reserve</p>
+                    <p className="text-[10px] sm:text-[11px] text-zinc-500 font-medium uppercase tracking-wider">{stablecoin} {stablecoin.toLowerCase() === 'cash' ? 'Reserve' : 'Cash Reserve'}</p>
                     <p className="text-lg sm:text-xl font-mono font-bold tabular-nums tracking-tight mt-0.5">
                       {fmt(cash)}
                       <span className="text-xs text-zinc-500 font-sans ml-2">{cashPct.toFixed(1)}% of portfolio</span>
@@ -411,6 +411,81 @@ export default function Dashboard() {
                   </p>
                 </div>
               )}
+            </div>
+          );
+        })()}
+
+        {/* Portfolio Allocation Bar */}
+        {portfolioValue > 0 && (() => {
+          const SEGMENT_COLORS = {
+            BTC:    { bg: '#f97316', bgEnd: '#d97706' },
+            ETH:    { bg: '#818cf8', bgEnd: '#8b5cf6' },
+            SOL:    { bg: '#a855f7', bgEnd: '#d946ef' },
+            AQUARI: { bg: '#22d3ee', bgEnd: '#14b8a6' },
+            XAUT:   { bg: '#eab308', bgEnd: '#f59e0b' },
+          };
+          const DEFAULT_SEG = { bg: '#71717a', bgEnd: '#52525b' };
+
+          const segments = assetList
+            .map((a) => {
+              const p = prices?.[a.symbol];
+              if (!p || !a.avgCost || a.avgCost === 0) return null;
+              const currentValue = (a.holdingsUsd / a.avgCost) * p;
+              if (currentValue <= 0) return null;
+              const pct = (currentValue / portfolioValue) * 100;
+              const colors = SEGMENT_COLORS[a.symbol] || DEFAULT_SEG;
+              return { symbol: a.symbol, value: currentValue, pct, ...colors };
+            })
+            .filter(Boolean);
+
+          const cashPct = portfolioValue > 0 ? (cash / portfolioValue) * 100 : 0;
+          if (cashPct > 0) {
+            segments.push({ symbol: 'Cash', value: cash, pct: cashPct, bg: '#52525b', bgEnd: '#3f3f46' });
+          }
+
+          if (segments.length === 0) return null;
+
+          return (
+            <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '120ms' }}>
+              <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Portfolio Allocation</h2>
+
+              {/* Stacked horizontal bar */}
+              <div className="h-3 rounded-full overflow-hidden flex bg-zinc-800/60">
+                {segments.map((seg, i) => (
+                  <div
+                    key={seg.symbol}
+                    className="h-full transition-all duration-700 ease-out first:rounded-l-full last:rounded-r-full"
+                    style={{
+                      width: `${seg.pct}%`,
+                      background: `linear-gradient(to right, ${seg.bg}, ${seg.bgEnd})`,
+                      animation: `bar-grow 0.8s ease-out ${i * 0.08}s both`,
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3">
+                {segments.map((seg) => {
+                  const coinColors = COIN_COLORS[seg.symbol];
+                  const labelClass = coinColors ? coinColors.label : 'text-zinc-400';
+                  return (
+                    <div key={seg.symbol} className="flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ background: seg.bg }}
+                      />
+                      <span className={`text-[11px] font-semibold ${labelClass}`}>{seg.symbol}</span>
+                      <span className="text-[11px] text-zinc-500 font-mono tabular-nums">
+                        {seg.pct.toFixed(1)}%
+                      </span>
+                      <span className="text-[10px] text-zinc-600 font-mono tabular-nums">
+                        {fmt(seg.value)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })()}
@@ -697,7 +772,7 @@ export default function Dashboard() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
                 </div>
-                <p className="text-zinc-500 text-sm">{alertFilter === 'all' ? 'No alerts yet' : `No ${alertFilter} alerts`}</p>
+                <p className="text-zinc-500 text-sm">{alertFilter === 'all' ? (alerts.length > 0 ? 'No active alerts' : 'No alerts yet') : `No ${alertFilter} alerts`}</p>
                 {alertFilter === 'all' && <p className="text-zinc-600 text-xs mt-1">Silence = do nothing. That&apos;s usually right.</p>}
               </div>
             );

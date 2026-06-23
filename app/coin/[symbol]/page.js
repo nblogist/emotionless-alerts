@@ -21,6 +21,9 @@ export default function CoinDetail() {
   const [activePid, setActivePid] = useState(null);
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null); // null | { mode: 'add' } | { mode: 'edit', index, txn }
+  const [chartDays, setChartDays] = useState(30);
+  const [chartData, setChartData] = useState(null);
+  const [chartLoading, setChartLoading] = useState(true);
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -55,6 +58,17 @@ export default function CoinDetail() {
     const iv = setInterval(fetchData, 60000);
     return () => clearInterval(iv);
   }, [fetchData, activePid]);
+
+  // Fetch chart data
+  useEffect(() => {
+    if (!coin) return;
+    setChartLoading(true);
+    fetch(`/api/prices/chart?coin=${coin}&days=${chartDays}`)
+      .then(r => r.json())
+      .then(d => setChartData(d.prices || null))
+      .catch(() => setChartData(null))
+      .finally(() => setChartLoading(false));
+  }, [coin, chartDays]);
 
   function showToast(msg, type = 'success') {
     setToast({ msg, type });
@@ -277,6 +291,39 @@ export default function CoinDetail() {
           </div>
         </div>
 
+        {/* Price Chart */}
+        <div className="glass rounded-2xl p-5 animate-fade-up" style={{ animationDelay: '25ms' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Price Chart</h2>
+            <div className="flex gap-1">
+              {[7, 30, 90].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setChartDays(d)}
+                  className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                    chartDays === d
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      : 'bg-zinc-800/40 text-zinc-500 border border-zinc-700/20 hover:text-zinc-300 hover:border-zinc-600/30'
+                  }`}
+                >
+                  {d}D
+                </button>
+              ))}
+            </div>
+          </div>
+          {chartLoading ? (
+            <div className="h-48 flex items-center justify-center">
+              <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+            </div>
+          ) : chartData && chartData.length > 0 ? (
+            <PriceChart data={chartData} transactions={transactions} days={chartDays} />
+          ) : (
+            <div className="h-48 flex items-center justify-center text-zinc-600 text-sm">
+              Chart data unavailable
+            </div>
+          )}
+        </div>
+
         {/* Transaction History */}
         <div className="glass rounded-2xl p-5 animate-fade-up" style={{ animationDelay: '50ms' }}>
           <div className="flex items-center justify-between mb-4">
@@ -385,5 +432,177 @@ function TransactionList({ transactions, coin, activePid, onEdit, onDelete }) {
         );
       })}
     </div>
+  );
+}
+
+function PriceChart({ data, transactions, days }) {
+  // Chart dimensions (responsive via viewBox)
+  const W = 800;
+  const H = 300;
+  const PAD = { top: 20, right: 60, bottom: 30, left: 10 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
+  // Compute price bounds with 5% padding
+  const allPrices = data.map(d => d[1]);
+  const rawMin = Math.min(...allPrices);
+  const rawMax = Math.max(...allPrices);
+  const pricePad = (rawMax - rawMin) * 0.05 || rawMax * 0.01;
+  const minPrice = rawMin - pricePad;
+  const maxPrice = rawMax + pricePad;
+
+  const minTs = data[0][0];
+  const maxTs = data[data.length - 1][0];
+  const tsRange = maxTs - minTs || 1;
+  const priceRange = maxPrice - minPrice || 1;
+
+  function x(ts) {
+    return PAD.left + ((ts - minTs) / tsRange) * chartW;
+  }
+  function y(price) {
+    return PAD.top + chartH - ((price - minPrice) / priceRange) * chartH;
+  }
+
+  // Build the SVG path for the price line
+  const linePath = data.map((pt, i) => {
+    const cmd = i === 0 ? 'M' : 'L';
+    return `${cmd}${x(pt[0]).toFixed(2)},${y(pt[1]).toFixed(2)}`;
+  }).join(' ');
+
+  // Gradient fill area path
+  const areaPath = linePath
+    + ` L${x(data[data.length - 1][0]).toFixed(2)},${(PAD.top + chartH).toFixed(2)}`
+    + ` L${x(data[0][0]).toFixed(2)},${(PAD.top + chartH).toFixed(2)} Z`;
+
+  // Map transactions to chart points (only those within the chart time range)
+  const chartStart = minTs;
+  const chartEnd = maxTs;
+  const txnDots = transactions
+    .filter(t => t.date)
+    .map(t => {
+      const ts = new Date(t.date).getTime();
+      if (ts < chartStart || ts > chartEnd) return null;
+      return { ts, price: t.pricePerCoin, type: t.type };
+    })
+    .filter(Boolean);
+
+  // Y-axis labels (5 ticks)
+  const yTicks = [];
+  for (let i = 0; i <= 4; i++) {
+    const price = minPrice + (priceRange * i) / 4;
+    yTicks.push({ price, cy: y(price) });
+  }
+
+  // X-axis labels (5 ticks)
+  const xTicks = [];
+  for (let i = 0; i <= 4; i++) {
+    const ts = minTs + (tsRange * i) / 4;
+    const d = new Date(ts);
+    const label = days <= 7
+      ? `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${d.getUTCHours()}:00`
+      : `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+    xTicks.push({ ts, cx: x(ts), label });
+  }
+
+  // Format price for axis labels
+  function fmtAxisPrice(p) {
+    if (p >= 1000) return `$${(p / 1000).toFixed(1)}k`;
+    if (p >= 1) return `$${p.toFixed(2)}`;
+    if (p >= 0.01) return `$${p.toFixed(4)}`;
+    return `$${p.toFixed(6)}`;
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      className="w-full h-auto"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <defs>
+        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#10b981" stopOpacity="0.15" />
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {/* Horizontal grid lines */}
+      {yTicks.map((tick, i) => (
+        <line
+          key={`grid-${i}`}
+          x1={PAD.left}
+          y1={tick.cy}
+          x2={PAD.left + chartW}
+          y2={tick.cy}
+          stroke="#3f3f46"
+          strokeWidth="0.5"
+          strokeDasharray="4,4"
+        />
+      ))}
+
+      {/* Gradient fill under the line */}
+      <path d={areaPath} fill="url(#chartGrad)" />
+
+      {/* Price line */}
+      <path
+        d={linePath}
+        fill="none"
+        stroke="#10b981"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+
+      {/* Y-axis labels */}
+      {yTicks.map((tick, i) => (
+        <text
+          key={`y-${i}`}
+          x={PAD.left + chartW + 6}
+          y={tick.cy + 4}
+          fill="#71717a"
+          fontSize="10"
+          fontFamily="monospace"
+        >
+          {fmtAxisPrice(tick.price)}
+        </text>
+      ))}
+
+      {/* X-axis labels */}
+      {xTicks.map((tick, i) => (
+        <text
+          key={`x-${i}`}
+          x={tick.cx}
+          y={H - 4}
+          fill="#71717a"
+          fontSize="10"
+          fontFamily="monospace"
+          textAnchor="middle"
+        >
+          {tick.label}
+        </text>
+      ))}
+
+      {/* Transaction dots */}
+      {txnDots.map((dot, i) => (
+        <g key={`dot-${i}`}>
+          {/* Outer glow ring */}
+          <circle
+            cx={x(dot.ts)}
+            cy={y(dot.price)}
+            r="6"
+            fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
+            opacity="0.2"
+          />
+          {/* Inner dot */}
+          <circle
+            cx={x(dot.ts)}
+            cy={y(dot.price)}
+            r="3.5"
+            fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
+            stroke="#18181b"
+            strokeWidth="1.5"
+          />
+        </g>
+      ))}
+    </svg>
   );
 }

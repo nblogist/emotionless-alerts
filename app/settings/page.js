@@ -457,6 +457,11 @@ function Section({ title, badge, children, delay = 0 }) {
 }
 
 function Field({ label, value, onChange, type = 'number', prefix, suffix, hint }) {
+  const [editing, setEditing] = useState(false);
+  // Display rounded value when not editing; show full precision when focused
+  const displayValue = (!editing && type === 'number' && value != null && value !== '')
+    ? parseFloat(Number(value).toFixed(2))
+    : value;
   return (
     <div>
       <div className="flex items-center justify-between gap-4">
@@ -465,8 +470,10 @@ function Field({ label, value, onChange, type = 'number', prefix, suffix, hint }
           {prefix && <span className="text-sm text-zinc-500">{prefix}</span>}
           <input
             type={type}
-            value={value ?? ''}
+            value={displayValue ?? ''}
             onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setEditing(true)}
+            onBlur={() => setEditing(false)}
             className="w-36 sm:w-44 bg-zinc-800/60 border border-zinc-700/40 rounded-xl px-3 py-2 text-sm font-mono text-right
               focus:outline-none focus:border-zinc-600 transition-colors
               placeholder:text-zinc-700 tabular-nums"

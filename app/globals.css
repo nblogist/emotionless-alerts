@@ -89,6 +89,11 @@ body::before {
   50% { transform: translateY(-4px); }
 }
 
+@keyframes bar-grow {
+  from { max-width: 0; opacity: 0.5; }
+  to { max-width: 100%; opacity: 1; }
+}
+
 @layer utilities {
   .tabular-nums {
     font-variant-numeric: tabular-nums;
