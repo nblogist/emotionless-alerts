@@ -58,7 +58,7 @@ function recalculateConfig(config, transactions) {
 
   // Adjust cash: start from initialCash (set once), then subtract buys, add sells
   if (config.initialCash === undefined) {
-    // First time: capture current cash + all past buy spend as the starting point
+    // First time: recover original cash before any transactions were applied
     config.initialCash = (config.cash || 0) + totalBuySpend - totalSellProceeds;
   }
   config.cash = config.initialCash - totalBuySpend + totalSellProceeds;

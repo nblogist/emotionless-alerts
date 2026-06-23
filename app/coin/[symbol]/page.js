@@ -498,12 +498,27 @@ function PriceChart({ data, transactions, days }) {
 
   const chartStart = minTs;
   const chartEnd = maxTs;
-  const txnDots = transactions
+
+  // Build txn dots with running avg cost at each transaction point
+  const sortedTxns = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+  let runBought = 0, runSpent = 0, runSold = 0, runReceived = 0;
+  const txnEnriched = sortedTxns.map(t => {
+    if (t.type === 'buy') { runBought += t.amount; runSpent += t.amount * t.pricePerCoin; }
+    if (t.type === 'sell') { runSold += t.amount; runReceived += t.amount * t.pricePerCoin; }
+    return {
+      ...t,
+      avgCostAtTxn: runBought > 0 ? runSpent / runBought : 0,
+      totalSpent: runSpent,
+      totalCoins: runBought - runSold,
+    };
+  });
+
+  const txnDots = txnEnriched
     .filter(t => t.date)
     .map(t => {
       const ts = new Date(t.date).getTime();
       if (ts < chartStart || ts > chartEnd) return null;
-      return { ts, price: t.pricePerCoin, type: t.type, amount: t.amount, date: t.date };
+      return { ts, price: t.pricePerCoin, type: t.type, amount: t.amount, date: t.date, avgCostAtTxn: t.avgCostAtTxn, totalSpent: t.totalSpent, totalCoins: t.totalCoins, note: t.note };
     })
     .filter(Boolean);
 
@@ -653,34 +668,30 @@ function PriceChart({ data, transactions, days }) {
               style={{ transition: 'r 0.15s' }}
             />
             {/* Transaction tooltip */}
-            {isHovered && (
-              <g>
-                <rect
-                  x={cx > PAD.left + chartW / 2 ? cx - 130 : cx + 12}
-                  y={cy - 32}
-                  width="118" height="44" rx="8"
-                  fill="#18181b" stroke="#3f3f46" strokeWidth="1"
-                />
-                <text
-                  x={cx > PAD.left + chartW / 2 ? cx - 71 : cx + 71}
-                  y={cy - 14}
-                  textAnchor="middle"
-                  fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
-                  fontSize="11" fontWeight="bold" fontFamily="monospace"
-                >
-                  {dot.type.toUpperCase()} @ {fmtAxisPrice(dot.price)}
-                </text>
-                <text
-                  x={cx > PAD.left + chartW / 2 ? cx - 71 : cx + 71}
-                  y={cy + 2}
-                  textAnchor="middle"
-                  fill="#a1a1aa"
-                  fontSize="10" fontFamily="monospace"
-                >
-                  {fmtCoinAmt(dot.amount)} · {fmtUsd(total)}
-                </text>
-              </g>
-            )}
+            {isHovered && (() => {
+              const tw = 160;
+              const th = 72;
+              const tx = cx > PAD.left + chartW / 2 ? cx - tw - 12 : cx + 12;
+              const ty = Math.max(PAD.top, Math.min(cy - th / 2, PAD.top + chartH - th));
+              const tmx = tx + tw / 2;
+              return (
+                <g>
+                  <rect x={tx} y={ty} width={tw} height={th} rx="8" fill="#18181b" stroke="#3f3f46" strokeWidth="1" />
+                  <text x={tmx} y={ty + 15} textAnchor="middle" fill={dot.type === 'buy' ? '#10b981' : '#ef4444'} fontSize="11" fontWeight="bold" fontFamily="monospace">
+                    {dot.type.toUpperCase()} @ {fmtAxisPrice(dot.price)}
+                  </text>
+                  <text x={tmx} y={ty + 30} textAnchor="middle" fill="#e4e4e7" fontSize="10" fontFamily="monospace">
+                    {fmtCoinAmt(dot.amount)} coins · {fmtUsd(total)}
+                  </text>
+                  <text x={tmx} y={ty + 44} textAnchor="middle" fill="#a1a1aa" fontSize="10" fontFamily="monospace">
+                    Avg cost after: {fmtAxisPrice(dot.avgCostAtTxn)}
+                  </text>
+                  <text x={tmx} y={ty + 58} textAnchor="middle" fill="#71717a" fontSize="9" fontFamily="monospace">
+                    {dot.date}{dot.note ? ` · ${dot.note}` : ''} · Total spent: {fmtUsd(dot.totalSpent)}
+                  </text>
+                </g>
+              );
+            })()}
           </g>
         );
       })}

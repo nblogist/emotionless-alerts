@@ -22,6 +22,7 @@ async function ensureInitialCash(config, pid) {
     .filter(t => t.type === 'sell')
     .reduce((sum, t) => sum + t.amount * t.pricePerCoin, 0);
 
+  // Recover original cash before any transactions were applied
   config.initialCash = (config.cash || 0) + totalBuySpend - totalSellProceeds;
   config.cash = config.initialCash - totalBuySpend + totalSellProceeds;
 

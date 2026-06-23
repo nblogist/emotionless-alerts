@@ -11,11 +11,39 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
     type: initialData?.type || 'buy',
     amount: initialData?.amount?.toString() || '',
     pricePerCoin: initialData?.pricePerCoin?.toString() || '',
+    total: initialData ? (initialData.amount * initialData.pricePerCoin).toString() : '',
     date: initialData?.date || new Date().toISOString().split('T')[0],
     note: initialData?.note || '',
   });
+  // Track which field the user is actively editing so we know which to auto-calc
+  const [lastEdited, setLastEdited] = useState(null); // 'amount' | 'pricePerCoin' | 'total'
   const [saving, setSaving] = useState(false);
   const backdropRef = useRef(null);
+
+  function updateField(field, value) {
+    setLastEdited(field);
+    setForm(f => {
+      const next = { ...f, [field]: value };
+      const amt = parseFloat(field === 'amount' ? value : next.amount);
+      const ppc = parseFloat(field === 'pricePerCoin' ? value : next.pricePerCoin);
+      const tot = parseFloat(field === 'total' ? value : next.total);
+
+      if (field === 'amount' && !isNaN(amt) && !isNaN(ppc) && ppc > 0) {
+        next.total = (amt * ppc).toString();
+      } else if (field === 'amount' && !isNaN(amt) && amt > 0 && !isNaN(tot) && tot > 0) {
+        next.pricePerCoin = (tot / amt).toString();
+      } else if (field === 'pricePerCoin' && !isNaN(ppc) && !isNaN(amt) && amt > 0) {
+        next.total = (amt * ppc).toString();
+      } else if (field === 'pricePerCoin' && !isNaN(ppc) && ppc > 0 && !isNaN(tot) && tot > 0) {
+        next.amount = (tot / ppc).toString();
+      } else if (field === 'total' && !isNaN(tot) && !isNaN(ppc) && ppc > 0) {
+        next.amount = (tot / ppc).toString();
+      } else if (field === 'total' && !isNaN(tot) && !isNaN(amt) && amt > 0) {
+        next.pricePerCoin = (tot / amt).toString();
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     function handleKey(e) {
@@ -27,22 +55,22 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
 
   async function handleSubmit(e) {
     e.preventDefault();
-    if (!form.amount || !form.pricePerCoin) return;
+    const amt = parseFloat(form.amount);
+    const ppc = parseFloat(form.pricePerCoin);
+    if (!amt || !ppc || amt <= 0 || ppc <= 0) return;
     setSaving(true);
     await onSave({
       coin: form.coin,
       type: form.type,
-      amount: parseFloat(form.amount),
-      pricePerCoin: parseFloat(form.pricePerCoin),
+      amount: amt,
+      pricePerCoin: ppc,
       date: form.date,
       note: form.note,
     });
     setSaving(false);
   }
 
-  const total = form.amount && form.pricePerCoin
-    ? parseFloat(form.amount) * parseFloat(form.pricePerCoin)
-    : null;
+  const canSubmit = parseFloat(form.amount) > 0 && parseFloat(form.pricePerCoin) > 0;
 
   const colors = COIN_COLORS[form.coin] || DEFAULT_COLOR;
   const isSell = form.type === 'sell';
@@ -144,7 +172,7 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
               </div>
             </div>
 
-            {/* Amount + Price */}
+            {/* Amount + Price + Total — enter any 2, 3rd auto-calculates */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] text-zinc-500 mb-2 block font-medium uppercase tracking-wider">Quantity ({form.coin})</label>
@@ -153,8 +181,8 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
                   step="any"
                   placeholder="0.02"
                   value={form.amount}
-                  onChange={(e) => setForm(f => ({ ...f, amount: e.target.value }))}
-                  className={`w-full bg-zinc-800/50 border border-zinc-700/30 rounded-xl px-3.5 py-3 text-sm font-mono focus:outline-none ${accent.focus} transition-all placeholder:text-zinc-600`}
+                  onChange={(e) => updateField('amount', e.target.value)}
+                  className={`w-full bg-zinc-800/50 border border-zinc-700/30 rounded-xl px-3.5 py-3 text-sm font-mono focus:outline-none ${accent.focus} transition-all placeholder:text-zinc-600 ${lastEdited && lastEdited !== 'amount' && form.amount && !form.pricePerCoin ? '' : ''}`}
                   autoFocus
                 />
               </div>
@@ -165,25 +193,32 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
                   step="any"
                   placeholder="95,000"
                   value={form.pricePerCoin}
-                  onChange={(e) => setForm(f => ({ ...f, pricePerCoin: e.target.value }))}
+                  onChange={(e) => updateField('pricePerCoin', e.target.value)}
                   className={`w-full bg-zinc-800/50 border border-zinc-700/30 rounded-xl px-3.5 py-3 text-sm font-mono focus:outline-none ${accent.focus} transition-all placeholder:text-zinc-600`}
                 />
               </div>
             </div>
 
-            {/* Total */}
-            {total !== null && !isNaN(total) && (
-              <div className={`bg-gradient-to-r border rounded-xl px-4 py-3.5 flex items-center justify-between transition-colors duration-300 ${
+            {/* Total — editable, auto-calculates the missing field */}
+            <div>
+              <label className="text-[11px] text-zinc-500 mb-2 block font-medium uppercase tracking-wider">Total ($)</label>
+              <div className={`bg-gradient-to-r border rounded-xl flex items-center transition-colors duration-300 ${
                 isSell
                   ? 'from-red-500/5 to-red-500/10 border-red-500/15'
                   : 'from-emerald-500/5 to-emerald-500/10 border-emerald-500/15'
               }`}>
-                <span className="text-[11px] text-zinc-400 font-medium uppercase tracking-wider">Total</span>
-                <span className={`text-xl font-mono font-bold tabular-nums tracking-tight transition-colors duration-300 ${isSell ? 'text-red-300' : ''}`}>
-                  ${total.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </span>
+                <span className="text-zinc-500 pl-4 text-sm font-mono">$</span>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="500"
+                  value={form.total}
+                  onChange={(e) => updateField('total', e.target.value)}
+                  className={`w-full bg-transparent py-3.5 px-2 text-sm font-mono font-bold tabular-nums tracking-tight focus:outline-none placeholder:text-zinc-600 ${isSell ? 'text-red-300' : 'text-white'}`}
+                />
               </div>
-            )}
+              <p className="text-[10px] text-zinc-600 mt-1">Enter any 2 fields — the 3rd auto-calculates</p>
+            </div>
 
             {/* Date + Note row */}
             <div className="grid grid-cols-2 gap-3">
@@ -211,7 +246,7 @@ export default function TransactionModal({ mode, coin, initialData, onSave, onCl
             {/* Submit */}
             <button
               type="submit"
-              disabled={saving || !form.amount || !form.pricePerCoin}
+              disabled={saving || !canSubmit}
               className={`w-full py-3.5 rounded-xl text-sm font-bold tracking-wide transition-all duration-200 cursor-pointer mt-2 ${
                 isSell
                   ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-lg shadow-red-500/25 ring-1 ring-red-400/20'
