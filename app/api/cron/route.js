@@ -316,7 +316,8 @@ export async function GET(request) {
           if (entry.status === 'pending') entry.status = 'sent';
         }
         for (const a of alerts) {
-          await store.lpush('alertHistory', { message: a, time: now.toISOString(), portfolio: pf.id });
+          const alertId = `${pf.id}-${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
+          await store.lpush('alertHistory', { id: alertId, message: a, time: now.toISOString(), portfolio: pf.id, status: 'pending' });
         }
         totalAlerts += alerts.length;
         console.log(`[${pf.name}] Sent ${alerts.length} signal(s)`);

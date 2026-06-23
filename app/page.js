@@ -20,6 +20,8 @@ export default function Dashboard() {
   const [alertsSeenAt, setAlertsSeenAt] = useState(null);
   const [histPrices, setHistPrices] = useState(null);
   const [pnlPeriod, setPnlPeriod] = useState('all');
+  const [alerts, setAlerts] = useState([]);
+  const [alertFilter, setAlertFilter] = useState('all');
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -34,7 +36,7 @@ export default function Dashboard() {
     if (!activePid) return;
     if (isRefresh) setRefreshing(true);
     try {
-      const [pRes, cRes, sRes, nRes, aRes, seenRes, hRes] = await Promise.all([
+      const [pRes, cRes, sRes, nRes, aRes, seenRes, hRes, alRes] = await Promise.all([
         fetch('/api/prices'),
         fetch(`/api/config?portfolio=${activePid}`),
         fetch(`/api/status?portfolio=${activePid}`),
@@ -42,6 +44,7 @@ export default function Dashboard() {
         fetch('/api/activity'),
         fetch('/api/alerts-seen'),
         fetch('/api/prices/history'),
+        fetch('/api/alerts'),
       ]);
       setPrices(await pRes.json());
       setConfig(await cRes.json());
@@ -52,6 +55,8 @@ export default function Dashboard() {
       setAlertsSeenAt(seenData.seenAt);
       const hData = await hRes.json();
       if (!hData.error) setHistPrices(hData);
+      const alData = await alRes.json();
+      if (Array.isArray(alData)) setAlerts(alData);
       setError(null);
     } catch (e) {
       setError(e.message);
@@ -60,6 +65,15 @@ export default function Dashboard() {
       setRefreshing(false);
     }
   }, [activePid]);
+
+  const updateAlertStatus = useCallback(async (id, newStatus) => {
+    setAlerts(prev => prev.map(a => a.id === id ? { ...a, status: newStatus } : a));
+    await fetch('/api/alerts', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status: newStatus }),
+    });
+  }, []);
 
   useEffect(() => {
     if (!activePid) return;
@@ -647,27 +661,92 @@ export default function Dashboard() {
         {/* Recent Alerts */}
         <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '350ms' }}>
           <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Recent Alerts</h2>
-          <p className="text-[11px] text-zinc-600 mt-0.5 mb-3 sm:mb-4">Same alert won&apos;t repeat until conditions change</p>
-          {!status?.alerts || status.alerts.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-800/40 flex items-center justify-center">
-                <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-              </div>
-              <p className="text-zinc-500 text-sm">No alerts yet</p>
-              <p className="text-zinc-600 text-xs mt-1">Silence = do nothing. That&apos;s usually right.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {status.alerts.map((a, i) => (
-                <div key={i} className="bg-zinc-800/20 rounded-xl p-3.5 border-l-2 border-amber-500/30">
-                  <p className="text-[10px] text-zinc-600 font-mono">{new Date(a.time).toLocaleString()}</p>
-                  <p className="text-[13px] sm:text-sm text-zinc-200 mt-1.5 whitespace-pre-line leading-relaxed">{a.message}</p>
+          <p className="text-[11px] text-zinc-600 mt-0.5 mb-3">Same alert won&apos;t repeat until conditions change</p>
+
+          {/* Filter pills */}
+          <div className="flex gap-1.5 mb-3 sm:mb-4 overflow-x-auto">
+            {[
+              { key: 'all', label: 'All' },
+              { key: 'pending', label: 'Pending' },
+              { key: 'done', label: 'Done' },
+              { key: 'dismissed', label: 'Dismissed' },
+            ].map(f => {
+              const count = f.key === 'all' ? alerts.length : alerts.filter(a => a.status === f.key).length;
+              return (
+                <button key={f.key} onClick={() => setAlertFilter(f.key)}
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
+                    alertFilter === f.key
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                      : 'bg-zinc-800/30 text-zinc-500 border border-transparent hover:text-zinc-400'
+                  }`}>
+                  {f.label}{count > 0 ? ` (${count})` : ''}
+                </button>
+              );
+            })}
+          </div>
+
+          {(() => {
+            const filtered = alertFilter === 'all' ? alerts : alerts.filter(a => a.status === alertFilter);
+            if (filtered.length === 0) return (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-800/40 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
                 </div>
-              ))}
-            </div>
-          )}
+                <p className="text-zinc-500 text-sm">{alertFilter === 'all' ? 'No alerts yet' : `No ${alertFilter} alerts`}</p>
+                {alertFilter === 'all' && <p className="text-zinc-600 text-xs mt-1">Silence = do nothing. That&apos;s usually right.</p>}
+              </div>
+            );
+            return (
+              <div className="space-y-2">
+                {filtered.map((a) => {
+                  const borderColor = a.status === 'done' ? 'border-emerald-500/30' : a.status === 'dismissed' ? 'border-zinc-600/30' : 'border-amber-500/30';
+                  const opacity = a.status === 'dismissed' ? 'opacity-50' : '';
+                  return (
+                    <div key={a.id} className={`bg-zinc-800/20 rounded-xl p-3.5 border-l-2 ${borderColor} ${opacity}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] text-zinc-600 font-mono">{new Date(a.time).toLocaleString()}</p>
+                            {a.status === 'done' && <span className="text-[9px] font-medium text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">DONE</span>}
+                            {a.status === 'dismissed' && <span className="text-[9px] font-medium text-zinc-500 bg-zinc-700/30 px-1.5 py-0.5 rounded">DISMISSED</span>}
+                          </div>
+                          <p className="text-[13px] sm:text-sm text-zinc-200 mt-1.5 whitespace-pre-line leading-relaxed">{a.message}</p>
+                        </div>
+                        <div className="flex gap-1 shrink-0 mt-1">
+                          {a.status === 'pending' && (
+                            <>
+                              <button onClick={() => updateAlertStatus(a.id, 'done')} title="Mark as done"
+                                className="w-7 h-7 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 flex items-center justify-center transition-colors">
+                                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5"/>
+                                </svg>
+                              </button>
+                              <button onClick={() => updateAlertStatus(a.id, 'dismissed')} title="Dismiss"
+                                className="w-7 h-7 rounded-lg bg-zinc-700/20 hover:bg-zinc-700/40 flex items-center justify-center transition-colors">
+                                <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                              </button>
+                            </>
+                          )}
+                          {a.status !== 'pending' && (
+                            <button onClick={() => updateAlertStatus(a.id, 'pending')} title="Move back to pending"
+                              className="w-7 h-7 rounded-lg bg-zinc-700/20 hover:bg-zinc-700/40 flex items-center justify-center transition-colors">
+                              <svg className="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"/>
+                              </svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Activity Log */}
