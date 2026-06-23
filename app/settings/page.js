@@ -122,11 +122,28 @@ export default function Settings() {
     return { changes, warnings };
   }
 
+  // Check if portfolio-level fields (name, telegramChatId, email) changed
+  function hasPortfolioChanges() {
+    if (!activePortfolio) return false;
+    const original = portfolios.find(p => p.id === activePortfolio.id);
+    if (!original) return false;
+    return original.name !== activePortfolio.name
+      || (original.telegramChatId || '') !== (activePortfolio.telegramChatId || '')
+      || (original.alertEmail || '') !== (activePortfolio.alertEmail || '')
+      || (original.stablecoin || '') !== (activePortfolio.stablecoin || '');
+  }
+
   function handleSaveClick() {
     const { changes, warnings } = computeChanges();
-    if (changes.length === 0) {
+    const pfChanged = hasPortfolioChanges();
+    if (changes.length === 0 && !pfChanged) {
       showToast('No changes to save');
       return;
+    }
+    if (pfChanged) {
+      if (!changes.includes('[Portfolio settings updated]')) {
+        changes.push('[Portfolio settings updated]');
+      }
     }
     // Always show confirmation dialog
     setConfirm({ changes, warnings });
@@ -136,12 +153,23 @@ export default function Settings() {
     setConfirm(null);
     setSaving(true);
     try {
-      const res = await fetch(`/api/config?portfolio=${activePid}`, {
+      const configRes = await fetch(`/api/config?portfolio=${activePid}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(config),
       });
-      if (res.ok) {
+      // Also save portfolio settings if they changed
+      if (hasPortfolioChanges()) {
+        const pfRes = await fetch('/api/portfolios', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(activePortfolio),
+        });
+        if (pfRes.ok) {
+          setPortfolios(prev => prev.map(p => p.id === activePortfolio.id ? activePortfolio : p));
+        }
+      }
+      if (configRes.ok) {
         showToast('Settings saved');
         setSavedConfig(JSON.parse(JSON.stringify(config)));
       } else showToast('Save failed', 'error');
