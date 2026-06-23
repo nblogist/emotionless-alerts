@@ -436,14 +436,17 @@ function TransactionList({ transactions, coin, activePid, onEdit, onDelete }) {
 }
 
 function PriceChart({ data, transactions, days }) {
-  // Chart dimensions (responsive via viewBox)
+  const [hover, setHover] = useState(null); // { svgX, dataIdx }
+  const [hoveredTxn, setHoveredTxn] = useState(null); // index into txnDots
+  const svgRef = useCallback(node => { svgRef.current = node; }, []);
+  const svgEl = { current: null };
+
   const W = 800;
   const H = 300;
   const PAD = { top: 20, right: 60, bottom: 30, left: 10 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
-  // Compute price bounds with 5% padding
   const allPrices = data.map(d => d[1]);
   const rawMin = Math.min(...allPrices);
   const rawMax = Math.max(...allPrices);
@@ -463,18 +466,36 @@ function PriceChart({ data, transactions, days }) {
     return PAD.top + chartH - ((price - minPrice) / priceRange) * chartH;
   }
 
-  // Build the SVG path for the price line
+  // Find closest data point to an SVG x coordinate
+  function closestIdx(svgX) {
+    const ts = minTs + ((svgX - PAD.left) / chartW) * tsRange;
+    let best = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < data.length; i++) {
+      const d = Math.abs(data[i][0] - ts);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  function handleMouseMove(e) {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    if (svgX < PAD.left || svgX > PAD.left + chartW) { setHover(null); return; }
+    const idx = closestIdx(svgX);
+    setHover({ idx });
+  }
+
   const linePath = data.map((pt, i) => {
     const cmd = i === 0 ? 'M' : 'L';
     return `${cmd}${x(pt[0]).toFixed(2)},${y(pt[1]).toFixed(2)}`;
   }).join(' ');
 
-  // Gradient fill area path
   const areaPath = linePath
     + ` L${x(data[data.length - 1][0]).toFixed(2)},${(PAD.top + chartH).toFixed(2)}`
     + ` L${x(data[0][0]).toFixed(2)},${(PAD.top + chartH).toFixed(2)} Z`;
 
-  // Map transactions to chart points (only those within the chart time range)
   const chartStart = minTs;
   const chartEnd = maxTs;
   const txnDots = transactions
@@ -482,18 +503,16 @@ function PriceChart({ data, transactions, days }) {
     .map(t => {
       const ts = new Date(t.date).getTime();
       if (ts < chartStart || ts > chartEnd) return null;
-      return { ts, price: t.pricePerCoin, type: t.type };
+      return { ts, price: t.pricePerCoin, type: t.type, amount: t.amount, date: t.date };
     })
     .filter(Boolean);
 
-  // Y-axis labels (5 ticks)
   const yTicks = [];
   for (let i = 0; i <= 4; i++) {
     const price = minPrice + (priceRange * i) / 4;
     yTicks.push({ price, cy: y(price) });
   }
 
-  // X-axis labels (5 ticks)
   const xTicks = [];
   for (let i = 0; i <= 4; i++) {
     const ts = minTs + (tsRange * i) / 4;
@@ -504,7 +523,6 @@ function PriceChart({ data, transactions, days }) {
     xTicks.push({ ts, cx: x(ts), label });
   }
 
-  // Format price for axis labels
   function fmtAxisPrice(p) {
     if (p >= 1000) return `$${(p / 1000).toFixed(1)}k`;
     if (p >= 1) return `$${p.toFixed(2)}`;
@@ -512,11 +530,32 @@ function PriceChart({ data, transactions, days }) {
     return `$${p.toFixed(6)}`;
   }
 
+  function fmtTooltipDate(ts) {
+    const d = new Date(ts);
+    const mo = d.toLocaleString('en', { month: 'short', timeZone: 'UTC' });
+    const day = d.getUTCDate();
+    if (days <= 7) {
+      return `${mo} ${day}, ${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+    }
+    return `${mo} ${day}`;
+  }
+
+  // Hover data point
+  const hp = hover ? data[hover.idx] : null;
+  const hx = hp ? x(hp[0]) : 0;
+  const hy = hp ? y(hp[1]) : 0;
+
+  // Tooltip positioning — flip if near right edge
+  const tooltipW = 120;
+  const tooltipFlip = hp && hx > PAD.left + chartW - tooltipW - 20;
+
   return (
     <svg
       viewBox={`0 0 ${W} ${H}`}
-      className="w-full h-auto"
+      className="w-full h-auto cursor-crosshair"
       preserveAspectRatio="xMidYMid meet"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => { setHover(null); setHoveredTxn(null); }}
     >
       <defs>
         <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -582,27 +621,106 @@ function PriceChart({ data, transactions, days }) {
       ))}
 
       {/* Transaction dots */}
-      {txnDots.map((dot, i) => (
-        <g key={`dot-${i}`}>
-          {/* Outer glow ring */}
-          <circle
-            cx={x(dot.ts)}
-            cy={y(dot.price)}
-            r="6"
-            fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
-            opacity="0.2"
+      {txnDots.map((dot, i) => {
+        const cx = x(dot.ts);
+        const cy = y(dot.price);
+        const isHovered = hoveredTxn === i;
+        const total = dot.amount * dot.price;
+        return (
+          <g
+            key={`dot-${i}`}
+            onMouseEnter={() => { setHoveredTxn(i); setHover(null); }}
+            onMouseLeave={() => setHoveredTxn(null)}
+            style={{ cursor: 'pointer' }}
+          >
+            {/* Hit area (larger invisible circle for easier hover) */}
+            <circle cx={cx} cy={cy} r="12" fill="transparent" />
+            {/* Outer glow ring */}
+            <circle
+              cx={cx} cy={cy}
+              r={isHovered ? 9 : 6}
+              fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
+              opacity={isHovered ? 0.3 : 0.2}
+              style={{ transition: 'r 0.15s, opacity 0.15s' }}
+            />
+            {/* Inner dot */}
+            <circle
+              cx={cx} cy={cy}
+              r={isHovered ? 5 : 3.5}
+              fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
+              stroke="#18181b"
+              strokeWidth="1.5"
+              style={{ transition: 'r 0.15s' }}
+            />
+            {/* Transaction tooltip */}
+            {isHovered && (
+              <g>
+                <rect
+                  x={cx > PAD.left + chartW / 2 ? cx - 130 : cx + 12}
+                  y={cy - 32}
+                  width="118" height="44" rx="8"
+                  fill="#18181b" stroke="#3f3f46" strokeWidth="1"
+                />
+                <text
+                  x={cx > PAD.left + chartW / 2 ? cx - 71 : cx + 71}
+                  y={cy - 14}
+                  textAnchor="middle"
+                  fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
+                  fontSize="11" fontWeight="bold" fontFamily="monospace"
+                >
+                  {dot.type.toUpperCase()} @ {fmtAxisPrice(dot.price)}
+                </text>
+                <text
+                  x={cx > PAD.left + chartW / 2 ? cx - 71 : cx + 71}
+                  y={cy + 2}
+                  textAnchor="middle"
+                  fill="#a1a1aa"
+                  fontSize="10" fontFamily="monospace"
+                >
+                  {fmtCoinAmt(dot.amount)} · {fmtUsd(total)}
+                </text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Hover crosshair + tooltip */}
+      {hp && hoveredTxn === null && (
+        <g>
+          {/* Vertical line */}
+          <line
+            x1={hx} y1={PAD.top}
+            x2={hx} y2={PAD.top + chartH}
+            stroke="#10b981" strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5"
           />
-          {/* Inner dot */}
-          <circle
-            cx={x(dot.ts)}
-            cy={y(dot.price)}
-            r="3.5"
-            fill={dot.type === 'buy' ? '#10b981' : '#ef4444'}
-            stroke="#18181b"
-            strokeWidth="1.5"
+          {/* Horizontal line */}
+          <line
+            x1={PAD.left} y1={hy}
+            x2={PAD.left + chartW} y2={hy}
+            stroke="#10b981" strokeWidth="0.8" strokeDasharray="3,3" opacity="0.3"
           />
+          {/* Dot on the line */}
+          <circle cx={hx} cy={hy} r="4" fill="#10b981" stroke="#18181b" strokeWidth="1.5" />
+          {/* Price + date tooltip */}
+          <g transform={`translate(${tooltipFlip ? hx - tooltipW - 12 : hx + 12}, ${Math.max(PAD.top, Math.min(hy - 22, PAD.top + chartH - 44))})`}>
+            <rect width={tooltipW} height="44" rx="8" fill="#18181b" stroke="#3f3f46" strokeWidth="1" />
+            <text x={tooltipW / 2} y="17" textAnchor="middle" fill="#e4e4e7" fontSize="12" fontWeight="bold" fontFamily="monospace">
+              {fmtAxisPrice(hp[1])}
+            </text>
+            <text x={tooltipW / 2} y="33" textAnchor="middle" fill="#71717a" fontSize="10" fontFamily="monospace">
+              {fmtTooltipDate(hp[0])}
+            </text>
+          </g>
         </g>
-      ))}
+      )}
+
+      {/* Invisible overlay for mouse events (ensures smooth tracking) */}
+      <rect
+        x={PAD.left} y={PAD.top}
+        width={chartW} height={chartH}
+        fill="transparent"
+      />
     </svg>
   );
 }
