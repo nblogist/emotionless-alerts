@@ -671,7 +671,7 @@ export default function Dashboard() {
               { key: 'done', label: 'Done' },
               { key: 'dismissed', label: 'Dismissed' },
             ].map(f => {
-              const count = f.key === 'all' ? alerts.length : alerts.filter(a => a.status === f.key).length;
+              const count = f.key === 'all' ? alerts.filter(a => a.status !== 'dismissed').length : alerts.filter(a => a.status === f.key).length;
               return (
                 <button key={f.key} onClick={() => setAlertFilter(f.key)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all ${
@@ -686,7 +686,7 @@ export default function Dashboard() {
           </div>
 
           {(() => {
-            const filtered = alertFilter === 'all' ? alerts : alerts.filter(a => a.status === alertFilter);
+            const filtered = alertFilter === 'all' ? alerts.filter(a => a.status !== 'dismissed') : alerts.filter(a => a.status === alertFilter);
             if (filtered.length === 0) return (
               <div className="text-center py-8">
                 <div className="w-12 h-12 mx-auto mb-3 rounded-2xl bg-zinc-800/40 flex items-center justify-center">

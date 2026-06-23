@@ -8,12 +8,14 @@ export async function GET() {
   const alerts = await store.lrange('alertHistory', 0, 49);
   const statuses = (await store.get('alertStatuses')) || {};
 
-  const merged = alerts.map((a) => ({
-    ...a,
-    // Alerts created before the id migration won't have an id — generate a stable one
-    id: a.id || `legacy-${a.time}-${(a.portfolio || '').slice(0, 4)}`,
-    status: (a.id && statuses[a.id]) || a.status || 'pending',
-  }));
+  const merged = alerts.map((a) => {
+    const id = a.id || `legacy-${a.time}-${(a.portfolio || '').slice(0, 4)}`;
+    return {
+      ...a,
+      id,
+      status: statuses[id] || a.status || 'pending',
+    };
+  });
 
   return NextResponse.json(merged);
 }
