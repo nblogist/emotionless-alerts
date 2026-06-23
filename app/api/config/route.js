@@ -43,7 +43,22 @@ export async function GET(request) {
 export async function PUT(request) {
   try {
     const pid = request.nextUrl.searchParams.get('portfolio') || 'corolla';
-    const config = await request.json();
+    let config = await request.json();
+
+    // Re-derive cash & capital from transactions so manual edits can't drift
+    const transactions = (await store.get(`transactions:${pid}`)) || [];
+    if (transactions.length > 0 && config.initialCash !== undefined) {
+      const totalBuySpend = transactions
+        .filter(t => t.type === 'buy')
+        .reduce((sum, t) => sum + t.amount * t.pricePerCoin, 0);
+      const totalSellProceeds = transactions
+        .filter(t => t.type === 'sell')
+        .reduce((sum, t) => sum + t.amount * t.pricePerCoin, 0);
+      config.cash = config.initialCash - totalBuySpend + totalSellProceeds;
+      const totalHoldings = (config.assets || []).reduce((sum, a) => sum + (a.holdingsUsd || 0), 0);
+      config.capital = config.cash + totalHoldings;
+    }
+
     await store.set(`config:${pid}`, config);
     return NextResponse.json({ ok: true });
   } catch (e) {

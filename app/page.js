@@ -22,6 +22,7 @@ export default function Dashboard() {
   const [pnlPeriod, setPnlPeriod] = useState('all');
   const [alerts, setAlerts] = useState([]);
   const [alertFilter, setAlertFilter] = useState('all');
+  const [hoveredAlloc, setHoveredAlloc] = useState(null);
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -450,17 +451,33 @@ export default function Dashboard() {
               <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Portfolio Allocation</h2>
 
               {/* Stacked horizontal bar */}
-              <div className="h-3 rounded-full overflow-hidden flex bg-zinc-800/60">
+              <div className="h-5 rounded-full overflow-hidden flex bg-zinc-800/60 relative">
                 {segments.map((seg, i) => (
-                  <div
+                  <Link
                     key={seg.symbol}
-                    className="h-full transition-all duration-700 ease-out first:rounded-l-full last:rounded-r-full"
+                    href={seg.symbol !== 'Cash' ? `/coin/${seg.symbol}?portfolio=${activePid}` : '#'}
+                    className={`h-full relative group/seg first:rounded-l-full last:rounded-r-full ${seg.symbol !== 'Cash' ? 'cursor-pointer' : 'cursor-default'}`}
                     style={{
                       width: `${seg.pct}%`,
                       background: `linear-gradient(to right, ${seg.bg}, ${seg.bgEnd})`,
                       animation: `bar-grow 0.8s ease-out ${i * 0.08}s both`,
                     }}
-                  />
+                    onClick={seg.symbol === 'Cash' ? (e) => e.preventDefault() : undefined}
+                    onMouseEnter={() => setHoveredAlloc(seg.symbol)}
+                    onMouseLeave={() => setHoveredAlloc(null)}
+                  >
+                    {/* Hover brighten overlay */}
+                    <div className="absolute inset-0 bg-white/0 group-hover/seg:bg-white/15 transition-all duration-150" />
+                    {/* Tooltip */}
+                    {hoveredAlloc === seg.symbol && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 border border-zinc-700/50 rounded-xl shadow-xl text-center whitespace-nowrap z-20 pointer-events-none">
+                        <p className="text-[11px] font-bold text-white">{seg.symbol}</p>
+                        <p className="text-[11px] text-zinc-400 font-mono">{fmt(seg.value)} &middot; {seg.pct.toFixed(1)}%</p>
+                        {seg.symbol !== 'Cash' && <p className="text-[9px] text-zinc-500 mt-0.5">Click to view</p>}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-zinc-900 border-r border-b border-zinc-700/50 rotate-45 -mt-1" />
+                      </div>
+                    )}
+                  </Link>
                 ))}
               </div>
 
@@ -469,10 +486,20 @@ export default function Dashboard() {
                 {segments.map((seg) => {
                   const coinColors = COIN_COLORS[seg.symbol];
                   const labelClass = coinColors ? coinColors.label : 'text-zinc-400';
+                  const isHovered = hoveredAlloc === seg.symbol;
                   return (
-                    <div key={seg.symbol} className="flex items-center gap-1.5">
+                    <Link
+                      key={seg.symbol}
+                      href={seg.symbol !== 'Cash' ? `/coin/${seg.symbol}?portfolio=${activePid}` : '#'}
+                      className={`flex items-center gap-1.5 transition-all duration-150 rounded-lg px-1.5 py-0.5 -mx-1.5 ${
+                        seg.symbol !== 'Cash' ? 'hover:bg-zinc-800/50 cursor-pointer' : 'cursor-default'
+                      } ${isHovered ? 'bg-zinc-800/50' : ''}`}
+                      onClick={seg.symbol === 'Cash' ? (e) => e.preventDefault() : undefined}
+                      onMouseEnter={() => setHoveredAlloc(seg.symbol)}
+                      onMouseLeave={() => setHoveredAlloc(null)}
+                    >
                       <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 transition-transform duration-150 ${isHovered ? 'scale-125' : ''}`}
                         style={{ background: seg.bg }}
                       />
                       <span className={`text-[11px] font-semibold ${labelClass}`}>{seg.symbol}</span>
@@ -482,7 +509,7 @@ export default function Dashboard() {
                       <span className="text-[10px] text-zinc-600 font-mono tabular-nums">
                         {fmt(seg.value)}
                       </span>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -589,8 +616,8 @@ export default function Dashboard() {
                           const newCoins = totalCoins + coinsToBuy;
                           const newHoldings = cc.holdingsUsd + buyAmount;
                           const newAvg = newCoins > 0 ? newHoldings / newCoins : price;
-                          const discount = cc.avgCost > 0 ? ((cc.avgCost - price) / cc.avgCost * 100).toFixed(1) : '0';
-                          const highDrop = rHigh > 0 ? ((rHigh - price) / rHigh * 100).toFixed(1) : '0';
+                          const discount = cc.avgCost > 0 ? ((cc.avgCost - price) / cc.avgCost * 100).toFixed(2) : '0';
+                          const highDrop = rHigh > 0 ? ((rHigh - price) / rHigh * 100).toFixed(2) : '0';
                           const statusLine = nearBuy
                             ? (belowCost ? `Buy signal active \u2014 price is ${discount}% below your avg cost` : `Buy signal active \u2014 price is ${highDrop}% off its recent high`)
                             : price >= cc.avgCost ? 'Price is at/above your avg cost \u2014 no buy signal' : 'Already above target allocation \u2014 no buy signal';
@@ -607,7 +634,7 @@ export default function Dashboard() {
                             </span>
                             <span className={`font-mono text-[11px] tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
                               {nearBuy
-                                ? (belowCost ? `${((cc.avgCost - price) / cc.avgCost * 100).toFixed(1)}% below avg cost` : `${((rHigh - price) / rHigh * 100).toFixed(1)}% off 30d high`)
+                                ? (belowCost ? `${((cc.avgCost - price) / cc.avgCost * 100).toFixed(2)}% below avg cost` : `${((rHigh - price) / rHigh * 100).toFixed(2)}% off 30d high`)
                                 : fmtPrice(cc.avgCost)}
                             </span>
                           </div>
