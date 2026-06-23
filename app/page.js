@@ -489,6 +489,9 @@ export default function Dashboard() {
                       <Row label="Cost">
                         <span className="font-mono tabular-nums text-zinc-400">{fmt(cc.holdingsUsd)}</span>
                       </Row>
+                      <Row label="Avg cost">
+                        <span className="font-mono tabular-nums text-zinc-400">{fmtPrice(cc.avgCost)} <span className="text-zinc-600 text-[10px]">/ {coin}</span></span>
+                      </Row>
                       <Row label={pnlPeriod === 'all' ? 'Profit / Loss' : `${pnlPeriod.toUpperCase()} P&L`}>
                         <span className={`font-mono font-semibold tabular-nums ${cardPnlUsd >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                           {cardPnlUsd >= 0 ? '+' : ''}{fmt(cardPnlUsd)}
@@ -525,11 +528,11 @@ export default function Dashboard() {
                             nearBuy ? 'bg-blue-500/8 border border-blue-500/20' : 'bg-zinc-800/20 border border-transparent'
                           }`}>
                             <span className={`text-[11px] font-medium whitespace-nowrap ${nearBuy ? 'text-blue-300' : 'text-zinc-500'}`}>
-                              {nearBuy ? 'DIP BUY' : 'Avg cost'}
+                              {nearBuy ? 'DIP BUY' : 'Buy trigger'}
                             </span>
                             <span className={`font-mono text-[11px] tabular-nums ${nearBuy ? 'text-blue-300 font-bold' : 'text-zinc-500'}`}>
                               {nearBuy
-                                ? (belowCost ? `${((cc.avgCost - price) / cc.avgCost * 100).toFixed(1)}% below avg` : `${((rHigh - price) / rHigh * 100).toFixed(1)}% off high`)
+                                ? (belowCost ? `${((cc.avgCost - price) / cc.avgCost * 100).toFixed(1)}% below avg cost` : `${((rHigh - price) / rHigh * 100).toFixed(1)}% off 30d high`)
                                 : fmtPrice(cc.avgCost)}
                             </span>
                           </div>
