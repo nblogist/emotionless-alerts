@@ -23,6 +23,10 @@ export default function Dashboard() {
   const [alerts, setAlerts] = useState([]);
   const [alertFilter, setAlertFilter] = useState('all');
   const [hoveredAlloc, setHoveredAlloc] = useState(null);
+  const [portfolioChart, setPortfolioChart] = useState(null);
+  const [portfolioChartDays, setPortfolioChartDays] = useState(30);
+  const [portfolioChartLoading, setPortfolioChartLoading] = useState(false);
+  const [portfolioChartHover, setPortfolioChartHover] = useState(null);
 
   useEffect(() => {
     fetch('/api/portfolios').then(r => r.json()).then(pfs => {
@@ -83,6 +87,62 @@ export default function Dashboard() {
     const iv = setInterval(fetchData, 60000);
     return () => clearInterval(iv);
   }, [fetchData, activePid]);
+
+  // Fetch portfolio value chart — combine price histories for all held coins
+  useEffect(() => {
+    const cfgAssets = config?.assets || [];
+    const cfgCash = config?.cash || 0;
+    if (!cfgAssets.length || !prices) return;
+    const heldCoins = cfgAssets.filter(a => a.avgCost > 0 && a.holdingsUsd > 0);
+    if (heldCoins.length === 0) { setPortfolioChart(null); return; }
+
+    setPortfolioChartLoading(true);
+    Promise.all(
+      heldCoins.map(a =>
+        fetch(`/api/prices/chart?coin=${a.symbol}&days=${portfolioChartDays}`)
+          .then(r => r.json())
+          .then(d => ({ symbol: a.symbol, prices: d.prices || [] }))
+          .catch(() => ({ symbol: a.symbol, prices: [] }))
+      )
+    ).then(results => {
+      const longest = results.reduce((best, r) => r.prices.length > best.prices.length ? r : best, results[0]);
+      if (!longest.prices.length) { setPortfolioChart(null); setPortfolioChartLoading(false); return; }
+
+      const lookups = {};
+      for (const r of results) {
+        const map = new Map();
+        for (const [ts, p] of r.prices) map.set(ts, p);
+        lookups[r.symbol] = { map, arr: r.prices };
+      }
+
+      function findPrice(symbol, targetTs) {
+        const { map, arr } = lookups[symbol] || {};
+        if (!arr || !arr.length) return null;
+        if (map.has(targetTs)) return map.get(targetTs);
+        let lo = 0, hi = arr.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (arr[mid][0] < targetTs) lo = mid + 1; else hi = mid;
+        }
+        if (lo > 0 && Math.abs(arr[lo - 1][0] - targetTs) < Math.abs(arr[lo][0] - targetTs)) lo--;
+        return arr[lo][1];
+      }
+
+      const chartPoints = longest.prices.map(([ts]) => {
+        let val = cfgCash;
+        for (const a of heldCoins) {
+          const coinPrice = findPrice(a.symbol, ts);
+          if (coinPrice && a.avgCost > 0) {
+            val += (a.holdingsUsd / a.avgCost) * coinPrice;
+          }
+        }
+        return [ts, val];
+      });
+
+      setPortfolioChart(chartPoints);
+      setPortfolioChartLoading(false);
+    });
+  }, [portfolioChartDays, config, prices]);
 
   function switchPortfolio(pid) {
     setActivePid(pid);
@@ -415,6 +475,41 @@ export default function Dashboard() {
             </div>
           );
         })()}
+
+        {/* Portfolio Value Chart */}
+        {portfolioValue > 0 && (
+          <div className="glass rounded-2xl p-4 sm:p-5 animate-fade-up" style={{ animationDelay: '100ms' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Portfolio Value</h2>
+              <div className="flex gap-1">
+                {[7, 30, 90].map(d => (
+                  <button
+                    key={d}
+                    onClick={() => setPortfolioChartDays(d)}
+                    className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                      portfolioChartDays === d
+                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-zinc-800/40 text-zinc-500 border border-zinc-700/20 hover:text-zinc-300 hover:border-zinc-600/30'
+                    }`}
+                  >
+                    {d}D
+                  </button>
+                ))}
+              </div>
+            </div>
+            {portfolioChartLoading ? (
+              <div className="h-48 flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin" />
+              </div>
+            ) : portfolioChart && portfolioChart.length > 0 ? (
+              <PortfolioValueChart data={portfolioChart} hover={portfolioChartHover} setHover={setPortfolioChartHover} days={portfolioChartDays} />
+            ) : (
+              <div className="h-48 flex items-center justify-center text-zinc-600 text-sm">
+                Chart data unavailable
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Portfolio Allocation Bar */}
         {portfolioValue > 0 && (() => {
@@ -966,5 +1061,130 @@ function CheckRow({ label, desc, active, isInfo }) {
         {active ? 'ACTIVE' : 'OK'}
       </span>
     </div>
+  );
+}
+
+function PortfolioValueChart({ data, hover, setHover, days }) {
+  const W = 800, H = 240;
+  const PAD = { top: 15, right: 65, bottom: 25, left: 10 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
+  const vals = data.map(d => d[1]);
+  const rawMin = Math.min(...vals);
+  const rawMax = Math.max(...vals);
+  const pad = (rawMax - rawMin) * 0.05 || rawMax * 0.01;
+  const minVal = rawMin - pad;
+  const maxVal = rawMax + pad;
+  const minTs = data[0][0];
+  const maxTs = data[data.length - 1][0];
+  const tsRange = maxTs - minTs || 1;
+  const valRange = maxVal - minVal || 1;
+
+  const xFn = ts => PAD.left + ((ts - minTs) / tsRange) * chartW;
+  const yFn = v => PAD.top + chartH - ((v - minVal) / valRange) * chartH;
+
+  const linePath = data.map((pt, i) => `${i === 0 ? 'M' : 'L'}${xFn(pt[0]).toFixed(2)},${yFn(pt[1]).toFixed(2)}`).join(' ');
+  const areaPath = linePath + ` L${xFn(data[data.length - 1][0]).toFixed(2)},${(PAD.top + chartH).toFixed(2)} L${xFn(data[0][0]).toFixed(2)},${(PAD.top + chartH).toFixed(2)} Z`;
+
+  // P&L coloring
+  const startVal = data[0][1];
+  const endVal = data[data.length - 1][1];
+  const isUp = endVal >= startVal;
+  const lineColor = isUp ? '#10b981' : '#ef4444';
+  const gradId = 'pfChartGrad';
+
+  // Ticks
+  const yTicks = Array.from({ length: 5 }, (_, i) => {
+    const v = minVal + (valRange * i) / 4;
+    return { val: v, cy: yFn(v) };
+  });
+  const xTicks = Array.from({ length: 5 }, (_, i) => {
+    const ts = minTs + (tsRange * i) / 4;
+    const d = new Date(ts);
+    const label = days <= 7 ? `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${d.getUTCHours()}:00` : `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+    return { cx: xFn(ts), label };
+  });
+
+  function fmtVal(v) {
+    if (v >= 1000) return `$${(v / 1000).toFixed(1)}k`;
+    return `$${v.toFixed(0)}`;
+  }
+
+  function closestIdx(svgX) {
+    const ts = minTs + ((svgX - PAD.left) / chartW) * tsRange;
+    let best = 0, bestDist = Infinity;
+    for (let i = 0; i < data.length; i++) {
+      const d = Math.abs(data[i][0] - ts);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    return best;
+  }
+
+  function handleMouseMove(e) {
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * W;
+    if (svgX < PAD.left || svgX > PAD.left + chartW) { setHover(null); return; }
+    setHover({ idx: closestIdx(svgX) });
+  }
+
+  const hp = hover ? data[hover.idx] : null;
+  const hx = hp ? xFn(hp[0]) : 0;
+  const hy = hp ? yFn(hp[1]) : 0;
+
+  // Change from start
+  const hpChange = hp ? ((hp[1] - startVal) / startVal * 100) : 0;
+  const hpUp = hp ? hp[1] >= startVal : true;
+
+  const tooltipW = 140;
+  const tooltipFlip = hp && hx > PAD.left + chartW - tooltipW - 20;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto cursor-crosshair" preserveAspectRatio="xMidYMid meet" onMouseMove={handleMouseMove} onMouseLeave={() => setHover(null)}>
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={lineColor} stopOpacity="0.15" />
+          <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {yTicks.map((t, i) => (
+        <line key={i} x1={PAD.left} y1={t.cy} x2={PAD.left + chartW} y2={t.cy} stroke="#3f3f46" strokeWidth="0.5" strokeDasharray="4,4" />
+      ))}
+
+      <path d={areaPath} fill={`url(#${gradId})`} />
+      <path d={linePath} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+      {yTicks.map((t, i) => (
+        <text key={`y${i}`} x={PAD.left + chartW + 6} y={t.cy + 4} fill="#71717a" fontSize="10" fontFamily="monospace">{fmtVal(t.val)}</text>
+      ))}
+      {xTicks.map((t, i) => (
+        <text key={`x${i}`} x={t.cx} y={H - 4} fill="#71717a" fontSize="10" fontFamily="monospace" textAnchor="middle">{t.label}</text>
+      ))}
+
+      {/* Hover crosshair */}
+      {hp && (
+        <g>
+          <line x1={hx} y1={PAD.top} x2={hx} y2={PAD.top + chartH} stroke={lineColor} strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5" />
+          <line x1={PAD.left} y1={hy} x2={PAD.left + chartW} y2={hy} stroke={lineColor} strokeWidth="0.8" strokeDasharray="3,3" opacity="0.3" />
+          <circle cx={hx} cy={hy} r="4" fill={lineColor} stroke="#18181b" strokeWidth="1.5" />
+          <g transform={`translate(${tooltipFlip ? hx - tooltipW - 12 : hx + 12}, ${Math.max(PAD.top, Math.min(hy - 30, PAD.top + chartH - 60))})`}>
+            <rect width={tooltipW} height="56" rx="8" fill="#18181b" stroke="#3f3f46" strokeWidth="1" />
+            <text x={tooltipW / 2} y="18" textAnchor="middle" fill="#e4e4e7" fontSize="13" fontWeight="bold" fontFamily="monospace">
+              {fmt(hp[1])}
+            </text>
+            <text x={tooltipW / 2} y="34" textAnchor="middle" fill={hpUp ? '#10b981' : '#ef4444'} fontSize="10" fontWeight="bold" fontFamily="monospace">
+              {hpUp ? '+' : ''}{hpChange.toFixed(2)}% from start
+            </text>
+            <text x={tooltipW / 2} y="48" textAnchor="middle" fill="#71717a" fontSize="10" fontFamily="monospace">
+              {(() => { const d = new Date(hp[0]); const mo = d.toLocaleString('en', { month: 'short', timeZone: 'UTC' }); return days <= 7 ? `${mo} ${d.getUTCDate()}, ${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}` : `${mo} ${d.getUTCDate()}`; })()}
+            </text>
+          </g>
+        </g>
+      )}
+
+      <rect x={PAD.left} y={PAD.top} width={chartW} height={chartH} fill="transparent" />
+    </svg>
   );
 }
