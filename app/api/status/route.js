@@ -23,7 +23,10 @@ export async function GET(request) {
       ? btcCloses.slice(-200).reduce((a, b) => a + b, 0) / 200
       : null;
 
-  const alerts = await store.lrange('alertHistory', 0, 19);
+  const allAlerts = await store.lrange('alertHistory', 0, 19);
+  // Only show alerts from the last 24 hours as "recent"
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  const alerts = allAlerts.filter(a => a?.time && new Date(a.time).getTime() > cutoff);
   const kvConfigured = store.isConfigured();
 
   return NextResponse.json({
